@@ -1,0 +1,15 @@
+# Pastas geradas pela Unreal -- tudo aqui e recriavel.
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.sln
+
+# Sistema operacional
+Thumbs.db
+desktop.ini
+.DS_Store
