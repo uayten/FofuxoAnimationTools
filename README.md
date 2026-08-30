@@ -1,15 +1,75 @@
 # Fofuxo's Animation Tools
 
-An editor plugin for **Unreal Engine 5.8**. Two things that are really one: getting
-animation *out* of Unreal, and making IK retargeting stop hurting.
+An editor plugin for **Unreal Engine 5.8** that does two things: gets animation
+*out* of Unreal in one piece, and adds to the **IK Retargeter** the tools it
+doesn't have.
 
-It came out of a concrete pipeline — character rigged in Blender, retargeted in
-Unreal, exported back out — and every button exists because some step of that
-loop was costing half an hour a day.
+**Export**
+
+- Many Animation Sequences **plus** a Skeletal Mesh into **one file**, each
+  animation kept as a **take named after the asset** — instead of thirty files
+  full of `Take 001`.
+- **FBX, USD and glTF** from the same dialog.
+- **Presets per destination** — axis, unit and scale, set once. **Blender** and
+  **Unity** come built in (Unity gets Y-up, which it does not convert on import);
+  add your own for Maya, Godot, or whatever you feed.
+- Splits into numbered files past N takes, for importers that choke on a big FBX.
+
+**IK Retargeter**
+
+- **Live Retarget** — rotate bones with the animation *running*, on the frame
+  where the error actually shows. Fixing fingers around a sword stops being
+  guesswork.
+- **Click bones by proximity** — near is enough. No more aiming at a line one
+  pixel wide.
+- **Stick bones** — thin bone drawing at a constant size on screen, like
+  Blender's stick mode.
+- **Preview attachments stored in the retargeter** — the sword in the hand, and
+  it survives reimporting the rig.
+- **Bone offset that ships** — nudge the weapon bone and the nudge comes out in
+  the exported animation.
+- **Source viewport** — a second viewport locked to the matching source bone,
+  following it frame by frame.
+- **Mirror**, **Align**, **Alt+R to reset a bone**, and **retarget poses that
+  travel** between projects and onto MetaHumans.
+
+Free, MIT, and it stays that way. [Install](#install) ·
+[What's here](#contents)
+
+---
+
+## Contents
+
+- [About this project](#about-this-project)
+- [Install](#install)
+  - [Where the buttons are](#where-the-buttons-are)
+  - [If the rebuild fails](#if-the-rebuild-fails)
+- [Releases and Fab](#releases-and-fab)
+- [Export](#export)
+- [IK Retargeter](#ik-retargeter)
+  - [Live Retarget](#live-retarget)
+  - [Editable Transforms panel](#editable-transforms-panel)
+  - [Alt+R](#altr)
+  - [Align (Esticar)](#align-esticar)
+  - [Mirror](#mirror)
+  - [Copy pose](#copy-pose)
+  - [Preview Attachments (Fofuxo)](#preview-attachments-fofuxo)
+  - [Source viewport](#source-viewport)
+  - [Stick bones, and being able to click them](#stick-bones-and-being-able-to-click-them)
+  - [Export animations](#export-animations)
+- [Building](#building)
+- [Renaming the plugin](#renaming-the-plugin)
+- [Known limits](#known-limits)
+- [License](#license)
+- [A note on the source](#a-note-on-the-source)
 
 ---
 
 ## About this project
+
+It came out of a concrete pipeline — character rigged in Blender, retargeted in
+Unreal, exported back out — and every button exists because some step of that
+loop was costing half an hour a day.
 
 I'm a 3D artist, not a programmer. **Every line of C++ in here was written by
 directing an AI** — vibe coding, if you like the term. What I brought was the
@@ -143,17 +203,26 @@ files and sees thirty takes called `Take 001`.
 - Every selected animation plus a Skeletal Mesh in a single file, **each
   animation as a take named after the asset**.
 - **FBX, USD and glTF**, from the same dialog.
-- **Targets**: saved presets of up axis, forward axis, unit and scale — one for
-  Blender, one for Unity, and you never think about it again.
+- **Targets**: saved presets of up axis, forward axis, unit and scale — set once,
+  then never think about it again.
 - **Animations per file**: past a limit, the export splits into numbered files.
   Some importers choke on an FBX with hundreds of takes.
 - With no animation selected, you get just the mesh.
+
+Two targets ship with the plugin, and you can add your own:
+
+| target | up axis | unit | why |
+|---|---|---|---|
+| **Blender** | Z | centimetres | The file comes out identical to Unreal's native export, and the importer decides the object scale. Metres looked like the fix for "object imports at 0.01" and isn't: the FBX SDK's `ConvertScene` doesn't touch vertices, it puts the scale on the nodes, so the 0.01 shows up anyway — just from inside the file. |
+| **Unity** | Y | centimetres | Unity converts the unit on import by itself, but **not** the axis. Handing it Y-up is the whole difference between a character standing up and one lying on its face. |
 
 There's a console command too, for scripts and builds:
 
 ```
 Fofuxo.Exportar <output.fbx> <mesh path> [animation folder] [Unity]
 ```
+
+The trailing `Unity` switches that run to the Unity target.
 
 ---
 
@@ -361,5 +430,10 @@ copies of the plugin's own source.
 The code, the comments and the in-editor text are in **Portuguese** — it started
 as a personal tool and I never saw a reason to write comments in a language I
 think worse in. The identifiers are Portuguese too (`FofuxoOssosNaTela` is "bones
-on screen"). If that's a barrier for you and you want to use this, say so in an
-issue; translating is mechanical.
+on screen").
+
+**I intend to translate all of it to English**, now that the repository is open.
+It's mechanical work, not a redesign, so it will happen in passes rather than in
+one commit — UI text first, since that's what you actually have to look at, then
+comments, then identifiers. If a specific string is in your way before I get
+there, open an issue and I'll move it up the queue.
