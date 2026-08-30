@@ -1,12 +1,16 @@
-// Fofuxo's Exporter -- esticar ossos na pose de retarget
+// Fofuxo -- esticar ossos na pose de retarget
 
 #pragma once
 
 #include "CoreMinimal.h"
+#include "FofuxoEixoDoMundo.h"
 #include "Textures/SlateIcon.h"
 
 class FIKRetargetEditor;
+class UIKRetargeterController;
 class UToolMenu;
+
+enum class ERetargetSourceOrTarget : uint8;
 
 struct FToolMenuContext;
 
@@ -26,23 +30,10 @@ enum class EFofuxoModoDeEsticar : uint8
 	NoMundo,
 };
 
-/**
- * Para onde a ponta do osso aponta no modo NoMundo. Tambem vive no ini.
- *
- * "Ponta do osso" e o X local, que e a convencao do esqueleto da Unreal. Num
- * esqueleto que use outro eixo como comprimento a escolha continua valendo --
- * sao seis orientacoes fixas e repetiveis, e a que parece certa e a que serve --
- * so que ai o nome do item nao descreve para onde o osso vai apontar.
- */
-enum class EFofuxoEixoDoMundo : uint8
-{
-	MaisX,
-	MenosX,
-	MaisY,
-	MenosY,
-	MaisZ,
-	MenosZ,
-};
+// O EFofuxoEixoDoMundo mudou de casa: ele agora e um UENUM no modulo de runtime,
+// em FofuxoEixoDoMundo.h, porque o op dos anexos tambem escolhe um eixo e precisa
+// salvar essa escolha dentro do retargeter. Os valores e os nomes sao os mesmos,
+// entao o que ja estava no ini continua valendo.
 
 /**
  * Endireita a pose de retarget de um jeito que o gizmo nao alcanca.
@@ -135,6 +126,25 @@ public:
 
 	/** O menuzinho dos tres pontos, que e onde se troca de modo. */
 	static void MontarMenuDeModos(UToolMenu* Menu);
+
+	/**
+	 * O delta que poe um osso com os eixos nos eixos do mundo, na pose de agora.
+	 *
+	 * A mesma conta do modo NoMundo, para um osso so e sem passar pela selecao do
+	 * visor -- e o que o botao Alinhar do op dos anexos usa, que sabe o nome do
+	 * osso e nao precisa que ninguem o selecione.
+	 *
+	 * Nao escreve nada: quem chama decide a transacao, o que e o que permite
+	 * alinhar os dois bonecos num Ctrl+Z so.
+	 *
+	 * @return false se o osso nao existir neste esqueleto.
+	 */
+	static bool DeltaParaOMundo(
+		UIKRetargeterController& Controlador,
+		ERetargetSourceOrTarget Lado,
+		FName Osso,
+		EFofuxoEixoDoMundo Eixo,
+		FQuat& OutDelta);
 
 private:
 	/** O editor de retarget dono desta barra, ou nullptr se nao for um. */

@@ -2,9 +2,9 @@
 	"FileVersion": 3,
 	"Version": 1,
 	"VersionName": "0.1",
-	"FriendlyName": "Fofuxo's Exporter",
-	"Description": "Exporta Animation Sequences e um Skeletal Mesh para um unico FBX, com cada animacao como um take nomeado. Tambem mostra no visor do IK Retargeter os assets de preview presos ao esqueleto.",
-	"Category": "Editor",
+	"FriendlyName": "Fofuxo's Animation Tools",
+	"Description": "Ferramentas de animacao para a Unreal. Exporta Animation Sequences e um Skeletal Mesh para um unico FBX, com cada animacao como um take nomeado. No IK Retargeter, acrescenta anexos de preview guardados no proprio retargeter, ajuste da pose com a animacao rodando, pose portatil entre projetos, um segundo visor preso ao osso da fonte e selecao de osso por proximidade.",
+	"Category": "Animation",
 	"CreatedBy": "Antonio Froz",
 	"CanContainContent": false,
 	"IsBetaVersion": true,
@@ -14,6 +14,11 @@
 			"Name": "FofuxoExporter",
 			"Type": "Editor",
 			"LoadingPhase": "PostEngineInit"
+		},
+		{
+			"Name": "FofuxoRetargetOps",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
 		},
 		{
 			"Name": "FofuxoRetargetProps",

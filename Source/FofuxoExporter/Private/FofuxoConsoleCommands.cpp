@@ -1,4 +1,4 @@
-// Fofuxo's Exporter
+// Fofuxo
 //
 // O mesmo export da janela, por linha de comando. Serve para exportar uma pasta
 // inteira sem clicar em nada, e e por aqui que da para rodar o plugin com o

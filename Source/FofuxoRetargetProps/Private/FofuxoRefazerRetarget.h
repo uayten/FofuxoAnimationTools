@@ -1,4 +1,4 @@
-// Fofuxo's Exporter -- refazer o retarget do que ja foi exportado
+// Fofuxo -- refazer o retarget do que ja foi exportado
 
 #pragma once
 

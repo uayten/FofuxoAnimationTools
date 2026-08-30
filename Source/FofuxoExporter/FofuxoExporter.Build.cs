@@ -1,4 +1,4 @@
-// Fofuxo's Exporter
+// Fofuxo
 
 using System.IO;
 using UnrealBuildTool;
@@ -8,6 +8,11 @@ public class FofuxoExporter : ModuleRules
 	public FofuxoExporter(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+
+		// O nome do plugin mora em Source/FofuxoComum/FofuxoNome.h, que nao e
+		// modulo -- e uma pasta de include, para nenhum modulo passar a depender
+		// de outro so por causa de uma string.
+		PublicIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "FofuxoComum"));
 
 		// FbxExporter.h mora em UnrealEd/Private. Os metodos dele sao UNREALED_API,
 		// entao linkam de fora; so o cabecalho e que nao e publico. Mesmo caminho

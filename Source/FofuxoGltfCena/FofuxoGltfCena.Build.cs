@@ -1,4 +1,4 @@
-// Fofuxo's Exporter -- cena glTF
+// Fofuxo -- cena glTF
 
 using UnrealBuildTool;
 

@@ -1,6 +1,7 @@
-// Fofuxo's Exporter
+// Fofuxo
 
 #include "SFofuxoExportWindow.h"
+#include "FofuxoNome.h"
 
 #include "Algo/AnyOf.h"
 #include "Animation/AnimSequence.h"
@@ -72,7 +73,7 @@ private:
 
 				FToolMenuEntry Item = FToolMenuEntry::InitMenuEntry(
 					"FofuxoExport",
-					LOCTEXT("FofuxoExport", "Fofuxo's Export"),
+					FText::Format(LOCTEXT("FofuxoExport", "{0} -- Exportar"), Fofuxo::NomeCurto()),
 					LOCTEXT("FofuxoExportTooltip",
 						"Exporta as animacoes e um Skeletal Mesh para um unico FBX, "
 						"cada animacao como um take com o nome do asset. Sem nenhuma "

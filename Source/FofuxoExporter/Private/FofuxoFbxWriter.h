@@ -1,4 +1,4 @@
-// Fofuxo's Exporter
+// Fofuxo
 
 #pragma once
 

@@ -1,6 +1,7 @@
-// Fofuxo's Exporter
+// Fofuxo
 
 #include "FofuxoCenaWriter.h"
+#include "FofuxoNome.h"
 
 #include "FofuxoCenaUsd.h"
 #include "FofuxoExportOptions.h"
@@ -67,9 +68,11 @@ bool FFofuxoCenaWriter::Exportar(const FFofuxoExportPedido& Pedido, FText& OutEr
 
 	const int32 NumArquivos = bSoAMalha ? 1 : FMath::DivideAndRoundUp(Total, PorArquivo);
 
-	FScopedSlowTask Progresso(bSoAMalha ? 1 : Total, bGltf
-		? LOCTEXT("GltfProgresso", "Fofuxo's Export (glTF)")
-		: LOCTEXT("UsdProgresso", "Fofuxo's Export (USD)"));
+	FScopedSlowTask Progresso(bSoAMalha ? 1 : Total, FText::Format(
+		bGltf
+			? LOCTEXT("GltfProgresso", "{0} -- Exportar (glTF)")
+			: LOCTEXT("UsdProgresso", "{0} -- Exportar (USD)"),
+		Fofuxo::NomeCurto()));
 	Progresso.MakeDialog(/*bShowCancelButton*/ true);
 
 	for (int32 Arquivo = 0; Arquivo < NumArquivos; ++Arquivo)

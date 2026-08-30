@@ -1,4 +1,4 @@
-// Fofuxo's Exporter
+// Fofuxo
 
 #pragma once
 
@@ -73,7 +73,7 @@ struct FFofuxoDestino
 };
 
 /**
- * As opcoes da janela do Fofuxo's Export.
+ * As opcoes da janela de exportacao.
  *
  * O que tem "config" e lembrado entre sessoes -- inclusive os destinos que voce
  * criar. O resto vem da selecao a cada vez que a janela abre.

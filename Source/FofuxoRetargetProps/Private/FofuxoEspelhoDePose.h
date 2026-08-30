@@ -1,4 +1,4 @@
-// Fofuxo's Exporter -- espelhar a pose de retarget
+// Fofuxo -- espelhar a pose de retarget
 
 #pragma once
 

@@ -1,6 +1,8 @@
-// Fofuxo's Exporter -- espelhar a pose de retarget
+// Fofuxo -- espelhar a pose de retarget
 
 #include "FofuxoEspelhoDePose.h"
+
+#include "FofuxoAjusteRodando.h"
 
 #include "Editor.h"
 #include "Engine/SkeletalMesh.h"
@@ -371,7 +373,13 @@ void FFofuxoEspelhoDePose::Conferir(FVigiado& Vigiado, FIKRetargetEditor& Editor
 		Vigiado.Lado != static_cast<uint8>(Lado) ||
 		Vigiado.Pose != NomeDaPose;
 
-	const bool bEditando = Controlador->GetRetargeterMode() == ERetargeterOutputMode::EditRetargetPose;
+	// Vale nos dois lugares em que a pose de retarget se edita. O vigia compara
+	// mapas de offset e nao sabe nem quer saber quem escreveu -- e por isso o gizmo
+	// do Live Retarget e o Alt+R entram pela mesma porta que o gizmo da engine.
+	const ERetargeterOutputMode Modo = Controlador->GetRetargeterMode();
+
+	const bool bEditando = Modo == ERetargeterOutputMode::EditRetargetPose
+		|| (FFofuxoAjusteRodando::EstaLigado() && Modo == ERetargeterOutputMode::RunRetarget);
 
 	if (bTrocou || !bLigado || !bEditando)
 	{

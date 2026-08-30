@@ -1,6 +1,7 @@
-// Fofuxo's Exporter
+// Fofuxo
 
 #include "FofuxoFbxWriter.h"
+#include "FofuxoNome.h"
 
 #include "FofuxoExportOptions.h"
 
@@ -497,7 +498,7 @@ bool FFofuxoFbxWriter::Exportar(const FFofuxoExportPedido& Pedido, FText& OutErr
 	// So a malha nao tem take, mas tem a conversao da geometria: conta como uma.
 	FScopedSlowTask Progresso(
 		(bSoAMalha ? 1 : Total) + NumArquivos,
-		LOCTEXT("Progresso", "Fofuxo's Export"));
+		FText::Format(LOCTEXT("Progresso", "{0} -- Exportar"), Fofuxo::NomeCurto()));
 
 	Progresso.MakeDialog(/*bShowCancelButton*/ true);
 

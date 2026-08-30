@@ -1,23 +1,31 @@
-// Fofuxo's Exporter -- anexos de preview no IK Retargeter
+// Fofuxo -- anexos de preview no IK Retargeter
 //
-// O editor de esqueleto guarda os "Add Preview Asset" em dois lugares:
-// USkeletalMesh::GetPreviewAttachedAssetContainer() e
-// USkeleton::PreviewAttachedAssetContainer. O visor do IK Retargeter ignora os
-// dois -- ele monta os componentes de preview na mao e nao passa pelo
-// FAnimationEditorPreviewScene, que e quem faz isso na Persona.
+// O visor do IK Retargeter nao pendura anexo nenhum: ele monta os componentes de
+// preview na mao e nao passa pelo FAnimationEditorPreviewScene, que e quem faz
+// isso na Persona. Este modulo faz esse trabalho nos dois bonecos.
 //
-// Este modulo repete, no visor do retargeter, o que a
-// FAnimationEditorPreviewScene::AddPreviewAttachedObjects faz na Persona, nos
-// dois bonecos ao mesmo tempo.
+// A lista vem do FFofuxoAnexosOp, que mora dentro do proprio retargeter. Ja
+// existiu aqui um segundo caminho, lendo os "Add Preview Asset" da USkeletalMesh
+// e da USkeleton -- e ele saiu justamente pelo que motivou o op: reimportar o rig
+// como asset novo troca as duas, e tudo que estava preso nelas fica para tras. O
+// retargeter nao troca.
+//
+// Ligar e desligar tambem e do op: e o Enable Op dele, na pilha. Nao ha botao na
+// barra para isso, porque seriam dois interruptores para a mesma luz.
 
+#include "FofuxoAjusteRodando.h"
+#include "FofuxoAnexoDetalhes.h"
+#include "FofuxoAnexosOp.h"
 #include "FofuxoCopiarPose.h"
+#include "FofuxoDetalhesDoOsso.h"
 #include "FofuxoEspelhoDePose.h"
 #include "FofuxoEsticarOssos.h"
+#include "FofuxoOssosNaTela.h"
 #include "FofuxoRefazerRetarget.h"
+#include "FofuxoVisorDaFonte.h"
+#include "FofuxoZerarRotacao.h"
 
 #include "Animation/DebugSkelMeshComponent.h"
-#include "Animation/PreviewAssetAttachComponent.h"
-#include "Animation/Skeleton.h"
 #include "ComponentAssetBroker.h"
 #include "Containers/Ticker.h"
 #include "Editor.h"
@@ -25,15 +33,18 @@
 #include "Engine/World.h"
 #include "Framework/Commands/UIAction.h"
 #include "GameFramework/WorldSettings.h"
-#include "Misc/ConfigCacheIni.h"
 #include "Modules/ModuleManager.h"
 #include "Retargeter/IKRetargeter.h"
+#include "StructUtils/InstancedStruct.h"
 #include "RetargetEditor/IKRetargetEditor.h"
 #include "RetargetEditor/IKRetargetEditorController.h"
 #include "Styling/AppStyle.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "ToolMenus.h"
+#include "ToolMenuContext.h"
+#include "ToolMenuSection.h"
 #include "Toolkits/AssetEditorToolkit.h"
+#include "Toolkits/AssetEditorToolkitMenuContext.h"
 
 #define LOCTEXT_NAMESPACE "FofuxoRetargetProps"
 
@@ -46,26 +57,94 @@ namespace FofuxoRetargetProps
 	// "AssetEditor." + GetToolMenuAppName() + ".ToolBar" + "." + modo.
 	static const FName NomeDaBarra("AssetEditor.IKRetargetEditor.ToolBar.IKRetargetApplicationMode");
 
-	static const TCHAR* SecaoIni = TEXT("FofuxoRetargetProps");
-	static const TCHAR* ChaveIni = TEXT("MostrarAnexos");
+	/** O editor de retarget dono desta barra, ou nullptr se a barra nao for de um. */
+	static FIKRetargetEditor* EditorDoContexto(const FToolMenuContext& Contexto)
+	{
+		const UAssetEditorToolkitMenuContext* DoEditor = Contexto.FindContext<UAssetEditorToolkitMenuContext>();
+		if (DoEditor == nullptr)
+		{
+			return nullptr;
+		}
+
+		const TSharedPtr<FAssetEditorToolkit> Toolkit = DoEditor->Toolkit.Pin();
+		if (!Toolkit.IsValid() || Toolkit->GetEditorName() != NomeDoEditor)
+		{
+			return nullptr;
+		}
+
+		return static_cast<FIKRetargetEditor*>(Toolkit.Get());
+	}
+
+	/** A lista de anexos guardada neste retargeter, ou nullptr se ele nao tem o op. */
+	static const FFofuxoAnexosOpSettings* AnexosDoRetargeter(const UIKRetargeter* Retargeter)
+	{
+		if (Retargeter == nullptr)
+		{
+			return nullptr;
+		}
+
+		for (const FInstancedStruct& Op : Retargeter->GetRetargetOps())
+		{
+			if (const FFofuxoAnexosOp* Nosso = Op.GetPtr<FFofuxoAnexosOp>())
+			{
+				return &Nosso->Settings;
+			}
+		}
+
+		return nullptr;
+	}
+
+	/**
+	 * Um numero que muda quando a lista muda.
+	 *
+	 * Editar a lista no painel de detalhes nao avisa ninguem, e refazer os
+	 * componentes a cada meio segundo faria a arma piscar. Entao o tick compara
+	 * este resumo com o do passeio anterior.
+	 *
+	 * O Enable Op entra aqui, e nao num "if" a parte: desligar o op e uma mudanca
+	 * como outra qualquer, e o mesmo mecanismo que reage a uma linha nova reage a
+	 * ele -- solta tudo e nao pendura de volta.
+	 */
+	static uint32 AssinaturaDosAnexos(const UIKRetargeter* Retargeter)
+	{
+		const FFofuxoAnexosOpSettings* Lista = AnexosDoRetargeter(Retargeter);
+		if (Lista == nullptr || !Lista->bEnabled)
+		{
+			return 0;
+		}
+
+		uint32 Resumo = GetTypeHash(Lista->Anexos.Num());
+
+		for (const FFofuxoAnexo& Anexo : Lista->Anexos)
+		{
+			Resumo = HashCombine(Resumo, GetTypeHash(Anexo.bMostrar));
+			Resumo = HashCombine(Resumo, GetTypeHash(Anexo.OssoNaFonte.BoneName));
+			Resumo = HashCombine(Resumo, GetTypeHash(Anexo.OssoNoAlvo.BoneName));
+			Resumo = HashCombine(Resumo, GetTypeHash(Anexo.Asset.ToString()));
+			Resumo = HashCombine(Resumo, GetTypeHash(static_cast<uint8>(Anexo.Boneco)));
+			// Pelo texto, e nao pelos componentes: FRotator nao tem GetTypeHash, e
+			// esta lista tem meia duzia de linhas conferidas duas vezes por segundo.
+			Resumo = HashCombine(Resumo, GetTypeHash(Anexo.Encaixe.ToString()));
+		}
+
+		return Resumo;
+	}
 }
 
 /**
  * Acompanha os editores de retarget abertos e mantem os anexos pendurados.
  *
- * Nao ha evento para "o retargeter trocou a preview mesh" que de para escutar de
- * fora, e o editor recria os componentes de preview quando isso acontece. Entao
- * o estado e reconferido por ticker: guardamos de qual componente e de qual
- * malha os anexos nasceram, e refazemos quando algum dos dois muda.
+ * Nao ha evento nem para "o retargeter trocou a preview mesh" nem para "a lista
+ * do op mudou" que de para escutar de fora, e o editor recria os componentes de
+ * preview quando a malha troca. Entao o estado e reconferido por ticker:
+ * guardamos de qual componente, de qual malha e de qual lista os anexos
+ * nasceram, e refazemos quando alguma das tres muda.
  */
 class FGerenteDeAnexos
 {
 public:
 	void Iniciar()
 	{
-		bLigado = true;
-		GConfig->GetBool(FofuxoRetargetProps::SecaoIni, FofuxoRetargetProps::ChaveIni, bLigado, GEditorPerProjectIni);
-
 		Ticker = FTSTicker::GetCoreTicker().AddTicker(
 			FTickerDelegate::CreateRaw(this, &FGerenteDeAnexos::Tick), 0.5f);
 	}
@@ -87,26 +166,8 @@ public:
 		FFofuxoRefazerRetarget::Esquecer();
 	}
 
-	bool EstaLigado() const { return bLigado; }
-
 	/** Quem recebe os editores que o tick encontra. O modulo e o dono. */
 	void Avisar(FFofuxoEspelhoDePose* AoEspelho) { Espelho = AoEspelho; }
-
-	void Alternar()
-	{
-		bLigado = !bLigado;
-		GConfig->SetBool(FofuxoRetargetProps::SecaoIni, FofuxoRetargetProps::ChaveIni, bLigado, GEditorPerProjectIni);
-
-		// O tick seguinte pendura ou solta; aqui so se antecipa o soltar para a
-		// resposta ser imediata ao clique.
-		if (!bLigado)
-		{
-			for (FEditorAberto& Aberto : Abertos)
-			{
-				Soltar(Aberto);
-			}
-		}
-	}
 
 private:
 	struct FEditorAberto
@@ -118,7 +179,9 @@ private:
 		TWeakObjectPtr<UDebugSkelMeshComponent> ComponenteAlvo;
 		TWeakObjectPtr<USkeletalMesh> MalhaFonte;
 		TWeakObjectPtr<USkeletalMesh> MalhaAlvo;
-		bool bEstavaLigado = false;
+
+		// O resumo da lista do op no passeio anterior.
+		uint32 Assinatura = 0;
 
 		// Nao precisam de referencia forte: o pai guarda cada um em
 		// USceneComponent::AttachChildren, que e UPROPERTY, e o pai vive
@@ -177,12 +240,19 @@ private:
 			// refazer tambem so pode ser posto depois que a aba dele existe, e o
 			// espelho precisa saber que este editor abriu.
 			FFofuxoRefazerRetarget::GarantirBotao(*Editor);
+			FFofuxoAjusteRodando::Acompanhar(*Editor);
+			FFofuxoZerarRotacao::GarantirAtalho(*Editor);
+			FFofuxoVisorDaFonte::GarantirAba(*Editor);
+			FFofuxoOssosNaTela::Acompanhar(*Editor);
 
 			if (Espelho != nullptr)
 			{
 				Espelho->Acompanhar(*Editor);
 			}
 		}
+
+		// Depois de todos: o aviso de desfazer vale para um passeio so.
+		FFofuxoAjusteRodando::LimparAvisoDeDesfazer();
 
 		return true;
 	}
@@ -197,12 +267,14 @@ private:
 		USkeletalMesh* MalhaFonte = Fonte ? Fonte->GetSkeletalMeshAsset() : nullptr;
 		USkeletalMesh* MalhaAlvo = Alvo ? Alvo->GetSkeletalMeshAsset() : nullptr;
 
+		const uint32 Assinatura = FofuxoRetargetProps::AssinaturaDosAnexos(Aberto.Asset.Get());
+
 		const bool bMudou =
-			Aberto.bEstavaLigado != bLigado ||
 			Aberto.ComponenteFonte != Fonte ||
 			Aberto.ComponenteAlvo != Alvo ||
 			Aberto.MalhaFonte != MalhaFonte ||
-			Aberto.MalhaAlvo != MalhaAlvo;
+			Aberto.MalhaAlvo != MalhaAlvo ||
+			Aberto.Assinatura != Assinatura;
 
 		if (!bMudou)
 		{
@@ -210,29 +282,67 @@ private:
 		}
 
 		Soltar(Aberto);
+		PendurarDoOp(Aberto, Aberto.Asset.Get(), Fonte, Alvo);
 
-		if (bLigado)
-		{
-			PendurarLado(Aberto, Fonte);
-			PendurarLado(Aberto, Alvo);
-		}
-
-		Aberto.bEstavaLigado = bLigado;
+		Aberto.Assinatura = Assinatura;
 		Aberto.ComponenteFonte = Fonte;
 		Aberto.ComponenteAlvo = Alvo;
 		Aberto.MalhaFonte = MalhaFonte;
 		Aberto.MalhaAlvo = MalhaAlvo;
 	}
 
-	void PendurarLado(FEditorAberto& Aberto, UDebugSkelMeshComponent* Componente)
+	/** A lista que mora no retargeter. Cada linha diz em qual dos dois bonecos vai. */
+	void PendurarDoOp(
+		FEditorAberto& Aberto,
+		const UIKRetargeter* Retargeter,
+		UDebugSkelMeshComponent* Fonte,
+		UDebugSkelMeshComponent* Alvo)
 	{
-		if (Componente == nullptr)
+		const FFofuxoAnexosOpSettings* Lista = FofuxoRetargetProps::AnexosDoRetargeter(Retargeter);
+		if (Lista == nullptr || !Lista->bEnabled)
 		{
 			return;
 		}
 
-		USkeletalMesh* Malha = Componente->GetSkeletalMeshAsset();
-		if (Malha == nullptr)
+		for (const FFofuxoAnexo& Anexo : Lista->Anexos)
+		{
+			if (!Anexo.bMostrar)
+			{
+				continue;
+			}
+
+			// LoadSynchronous, e nao Get: a arma pode nao estar carregada, e este
+			// e o momento em que se descobre que ela e necessaria. Uma vez so, mesmo
+			// quando ela vai nos dois bonecos.
+			UObject* Objeto = Anexo.Asset.LoadSynchronous();
+			if (Objeto == nullptr)
+			{
+				continue;
+			}
+
+			// Um osso por lado: os dois esqueletos quase nunca chamam o mesmo osso
+			// pelo mesmo nome, e e por isso que existe retarget.
+			if (Anexo.Boneco != EFofuxoBoneco::Alvo)
+			{
+				PendurarNum(Aberto, Fonte, Objeto, Anexo, Anexo.OssoNaFonte.BoneName);
+			}
+
+			if (Anexo.Boneco != EFofuxoBoneco::Fonte)
+			{
+				PendurarNum(Aberto, Alvo, Objeto, Anexo, Anexo.OssoNoAlvo.BoneName);
+			}
+		}
+	}
+
+	/** Uma linha da lista, num boneco so. */
+	void PendurarNum(
+		FEditorAberto& Aberto,
+		UDebugSkelMeshComponent* Componente,
+		UObject* Objeto,
+		const FFofuxoAnexo& Anexo,
+		const FName Osso)
+	{
+		if (Componente == nullptr)
 		{
 			return;
 		}
@@ -244,21 +354,9 @@ private:
 			return;
 		}
 
-		// Primeiro os da malha, depois os do esqueleto -- mesma ordem da Persona.
-		FPreviewAssetAttachContainer& DaMalha = Malha->GetPreviewAttachedAssetContainer();
-		for (int32 Indice = 0; Indice < DaMalha.Num(); ++Indice)
-		{
-			Anexar(Aberto, Componente, Dono, DaMalha[Indice].GetAttachedObject(), DaMalha[Indice].AttachedTo);
-		}
-
-		if (USkeleton* Esqueleto = Malha->GetSkeleton())
-		{
-			FPreviewAssetAttachContainer& DoEsqueleto = Esqueleto->PreviewAttachedAssetContainer;
-			for (int32 Indice = 0; Indice < DoEsqueleto.Num(); ++Indice)
-			{
-				Anexar(Aberto, Componente, Dono, DoEsqueleto[Indice].GetAttachedObject(), DoEsqueleto[Indice].AttachedTo);
-			}
-		}
+		// O Anexar sai quieto quando o osso esta vazio ou nao existe deste lado --
+		// linha pela metade nao vira erro, so nao aparece.
+		Anexar(Aberto, Componente, Dono, Objeto, Osso, Anexo.Encaixe);
 	}
 
 	void Anexar(
@@ -266,7 +364,8 @@ private:
 		UDebugSkelMeshComponent* Componente,
 		AWorldSettings* Dono,
 		UObject* Objeto,
-		const FName Encaixe)
+		const FName Encaixe,
+		const FTransform& Ajuste = FTransform::Identity)
 	{
 		if (Objeto == nullptr || Encaixe.IsNone())
 		{
@@ -290,14 +389,19 @@ private:
 		}
 
 		// RF_Transient, e nao RF_Transactional como na Persona: estes aqui sao
-		// derivados do que ja esta salvo no esqueleto, nao ha o que desfazer nem
-		// o que gravar.
+		// derivados do que ja esta salvo no op, nao ha o que desfazer nem o que
+		// gravar.
 		USceneComponent* Anexo = NewObject<USceneComponent>(Dono, Classe, NAME_None, RF_Transient);
 
 		FComponentAssetBrokerage::AssignAssetToComponent(Anexo, Objeto);
 
 		Anexo->SetupAttachment(Componente, Encaixe);
 		Anexo->RegisterComponent();
+
+		if (!Ajuste.Equals(FTransform::Identity))
+		{
+			Anexo->SetRelativeTransform(Ajuste);
+		}
 
 		Aberto.Anexos.Add(Anexo);
 	}
@@ -319,7 +423,6 @@ private:
 	TArray<FEditorAberto> Abertos;
 	FTSTicker::FDelegateHandle Ticker;
 	FFofuxoEspelhoDePose* Espelho = nullptr;
-	bool bLigado = true;
 };
 
 class FFofuxoRetargetPropsModule : public IModuleInterface
@@ -334,6 +437,11 @@ public:
 		Gerente->Avisar(Espelho.Get());
 		Gerente->Iniciar();
 
+		FFofuxoAnexoDetalhes::Registrar();
+		FFofuxoAjusteRodando::Registrar();
+		FFofuxoDetalhesDoOsso::Registrar();
+		FFofuxoZerarRotacao::Registrar();
+
 		UToolMenus::RegisterStartupCallback(
 			FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FFofuxoRetargetPropsModule::RegistrarMenus));
 	}
@@ -342,6 +450,16 @@ public:
 	{
 		UToolMenus::UnRegisterStartupCallback(this);
 		UToolMenus::UnregisterOwner(this);
+
+		// Antes de soltar o resto: o botao e as lambdas dele vivem nesta DLL, e um
+		// painel que continuasse com eles depois do unload chamaria codigo que nao
+		// existe mais.
+		FFofuxoAnexoDetalhes::Esquecer();
+		FFofuxoAjusteRodando::Esquecer();
+		FFofuxoDetalhesDoOsso::Esquecer();
+		FFofuxoZerarRotacao::Esquecer();
+		FFofuxoVisorDaFonte::Esquecer();
+		FFofuxoOssosNaTela::Esquecer();
 
 		if (Gerente.IsValid())
 		{
@@ -369,22 +487,71 @@ private:
 			return;
 		}
 
-		FGerenteDeAnexos* Alvo = Gerente.Get();
-
 		FToolMenuSection& Secao = Barra->FindOrAddSection("Fofuxo");
 
+		// Os anexos nao tem botao aqui: quem liga e desliga e o Enable Op do
+		// "Anexos de Preview (Fofuxo)", na pilha de ops, que e onde a lista mora.
+
 		Secao.AddEntry(FToolMenuEntry::InitToolBarButton(
-			"FofuxoAnexos",
+			"FofuxoAjusteRodando",
 			FUIAction(
-				FExecuteAction::CreateLambda([Alvo]() { Alvo->Alternar(); }),
+				FExecuteAction::CreateStatic(&FFofuxoAjusteRodando::Alternar),
 				FCanExecuteAction(),
-				FIsActionChecked::CreateLambda([Alvo]() { return Alvo->EstaLigado(); })),
-			LOCTEXT("Anexos", "Anexos"),
-			LOCTEXT("AnexosTip",
-				"Pendura no visor, na fonte e no alvo, os assets de preview do Skeletal Mesh e do Skeleton "
-				"-- os que voce adiciona pelo Add Preview Asset no editor de esqueleto. "
-				"Serve para conferir se um osso de arma esta sendo retargetado."),
-			FSlateIcon(FAppStyle::GetAppStyleSetName(), "ClassIcon.StaticMesh"),
+				FIsActionChecked::CreateStatic(&FFofuxoAjusteRodando::EstaLigado)),
+			LOCTEXT("AjusteRodando", "Live Retarget"),
+			LOCTEXT("AjusteRodandoTip",
+				"Poe um gizmo de rotacao no Running Retarget: com a animacao parada no frame que voce "
+				"quiser, clique num osso do alvo e gire. Feito para os dedos, que no ref pose estao "
+				"abertos e nao mostram se fecham na arma.\n\n"
+				"So no alvo, e so com o botao Fonte/Alvo no alvo -- a animacao da fonte e o dado de "
+				"entrada, nao ha o que ajustar nela.\n\n"
+				"O que o gizmo escreve e a pose de retarget, nao um ajuste daquele frame: o retargeter "
+				"nao tem onde guardar correcao por frame. Mas o giro que voce ver no frame 37 e o mesmo "
+				"giro que sai em todos os outros -- para dedo isso e o certo, porque o erro de um dedo "
+				"que segura uma espada e constante e o frame so serve para voce enxerga-lo."),
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "EditorViewport.RotateMode"),
+			EUserInterfaceActionType::ToggleButton));
+
+		Secao.AddEntry(FToolMenuEntry::InitToolBarButton(
+			"FofuxoVisorDaFonte",
+			FToolUIActionChoice(FToolUIAction(
+				FToolMenuExecuteAction::CreateLambda([](const FToolMenuContext& Contexto)
+				{
+					if (FIKRetargetEditor* Editor = FofuxoRetargetProps::EditorDoContexto(Contexto))
+					{
+						FFofuxoVisorDaFonte::Abrir(*Editor);
+					}
+				}))),
+			LOCTEXT("VisorDaFonte", "Visor da fonte"),
+			LOCTEXT("VisorDaFonteTip",
+				"Abre um segundo visor da mesma cena, com a camera colada no osso da fonte que "
+				"corresponde ao osso selecionado -- e seguindo ele quadro a quadro enquanto a "
+				"animacao roda.\n\n"
+				"Serve para ver o gabarito e o ajuste ao mesmo tempo: num visor voce gira o dedo "
+				"do alvo, no outro voce ve como o dedo do Manny esta naquele mesmo quadro, sem "
+				"viajar de camera entre os dois bonecos.\n\n"
+				"O correspondente sai do mapeamento de cadeias. A aba tambem esta em Window, e "
+				"nao volta sozinha quando o editor reabre."),
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Viewports")));
+
+		Secao.AddEntry(FToolMenuEntry::InitToolBarButton(
+			"FofuxoOssosEmVareta",
+			FUIAction(
+				FExecuteAction::CreateStatic(&FFofuxoOssosNaTela::Alternar),
+				FCanExecuteAction(),
+				FIsActionChecked::CreateStatic(&FFofuxoOssosNaTela::EstaLigado)),
+			LOCTEXT("OssosEmVareta", "Ossos em vareta"),
+			LOCTEXT("OssosEmVaretaTip",
+				"Troca o osso octaedrico da Unreal por uma vareta como a do Blender: linha fina "
+				"entre as juntas e um circulo em cada uma, do mesmo tamanho na tela em qualquer "
+				"distancia de camera. Numa mao com quinze ossos e a diferenca entre ver os dedos "
+				"e ver uma bola cinza.\n\n"
+				"O desenho da engine nao some, so encolhe -- e' nele que mora a identidade do osso "
+				"para o clique. Ele fica escondido debaixo da vareta.\n\n"
+				"O tamanho encolhido e o BoneDrawSize do retargeter, o mesmo da regua em "
+				"Character > Bones. Desligar devolve o valor de antes; salvar o RTG com isto "
+				"ligado grava o tamanho encolhido."),
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "EditorViewport.WireframeMode"),
 			EUserInterfaceActionType::ToggleButton));
 
 		FFofuxoEspelhoDePose* AoEspelho = Espelho.Get();
@@ -397,8 +564,9 @@ private:
 				FIsActionChecked::CreateLambda([AoEspelho]() { return AoEspelho->EstaLigado(); })),
 			LOCTEXT("Espelho", "Espelhar"),
 			LOCTEXT("EspelhoTip",
-				"No Editing Retarget Pose, repete no osso do outro lado a rotacao que voce der em um osso "
-				"-- rodou o thigh_l, o thigh_r acompanha espelhado.\n\n"
+				"Repete no osso do outro lado a rotacao que voce der em um osso -- rodou o thigh_l, o "
+				"thigh_r acompanha espelhado. Vale no Editing Retarget Pose e tambem no Live Retarget, "
+				"com o gizmo ou com o Alt+R.\n\n"
 				"Acha o par pelo nome: o lado escrito como l/r, left/right ou lt/rt, separado por \"_\", "
 				"\".\", \"-\" ou espaco, em qualquer caixa, ou colado em camelCase (HandL). Osso sem par, "
 				"como a coluna e a cabeca, fica de fora.\n\n"

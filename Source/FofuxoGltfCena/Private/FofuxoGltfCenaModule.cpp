@@ -1,4 +1,4 @@
-// Fofuxo's Exporter -- cena glTF
+// Fofuxo -- cena glTF
 //
 // Escreve um esqueleto e varias animacoes num arquivo glTF so.
 //

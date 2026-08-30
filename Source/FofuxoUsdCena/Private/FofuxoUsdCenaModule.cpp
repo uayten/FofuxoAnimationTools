@@ -1,4 +1,4 @@
-// Fofuxo's Exporter -- cena USD
+// Fofuxo -- cena USD
 //
 // Escreve varias animacoes num stage USD so: um SkelRoot, um Skeleton, e um
 // prim SkelAnimation por animacao.

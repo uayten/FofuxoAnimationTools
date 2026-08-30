@@ -1,6 +1,7 @@
-// Fofuxo's Exporter
+// Fofuxo
 
 #include "SFofuxoExportWindow.h"
+#include "FofuxoNome.h"
 
 #include "FofuxoExportOptions.h"
 #include "FofuxoFbxWriter.h"
@@ -571,7 +572,7 @@ void SFofuxoExportWindow::Abrir(const TArray<FAssetData>& Selecionados)
 	Opcoes->NomeDoArquivo = Malha != nullptr ? Malha->GetName() : Animacoes[0]->GetName();
 
 	const TSharedRef<SWindow> NovaJanela = SNew(SWindow)
-		.Title(LOCTEXT("TituloDaJanela", "Fofuxo's Export"))
+		.Title(FText::Format(LOCTEXT("TituloDaJanela", "{0} -- Exportar"), Fofuxo::Nome()))
 		.ClientSize(FVector2D(600.f, 700.f))
 		.SupportsMinimize(false)
 		.SupportsMaximize(false);

@@ -1,4 +1,4 @@
-// Fofuxo's Exporter -- cena USD
+// Fofuxo -- cena USD
 
 using UnrealBuildTool;
 

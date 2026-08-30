@@ -1,4 +1,4 @@
-// Fofuxo's Exporter -- copiar a pose de retarget de outro retargeter
+// Fofuxo -- copiar a pose de retarget de outro retargeter
 
 #pragma once
 

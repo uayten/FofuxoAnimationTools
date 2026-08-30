@@ -1,4 +1,4 @@
-// Fofuxo's Exporter -- esticar ossos na pose de retarget
+// Fofuxo -- esticar ossos na pose de retarget
 
 #include "FofuxoEsticarOssos.h"
 
@@ -504,6 +504,59 @@ void FFofuxoEsticarOssos::Esticar(const FToolMenuContext& Contexto)
 		AEscrever.Num(),
 		*Alvo.Malha->GetName(),
 		SemPai > 0 ? TEXT(" A raiz ficou de fora, nao tem pai com que se alinhar.") : TEXT(""));
+}
+
+bool FFofuxoEsticarOssos::DeltaParaOMundo(
+	UIKRetargeterController& Controlador,
+	const ERetargetSourceOrTarget Lado,
+	const FName Osso,
+	const EFofuxoEixoDoMundo Eixo,
+	FQuat& OutDelta)
+{
+	USkeletalMesh* Malha = Controlador.GetPreviewMesh(Lado);
+	if (Malha == nullptr)
+	{
+		return false;
+	}
+
+	const FReferenceSkeleton& Esqueleto = Malha->GetRefSkeleton();
+
+	const int32 Indice = Esqueleto.FindBoneIndex(Osso);
+	if (Indice == INDEX_NONE)
+	{
+		return false;
+	}
+
+	const TArray<FTransform>& Local = Esqueleto.GetRefBonePose();
+	const TMap<FName, FQuat>& Deltas =
+		Controlador.GetCurrentRetargetPose(Lado).GetAllDeltaRotations();
+
+	// A orientacao do pai na pose de agora. Subindo ate a raiz e voltando, porque o
+	// que importa e a cadeia deste osso -- o resto do esqueleto nao entra na conta.
+	TArray<int32> Cadeia;
+	for (int32 Subindo = Esqueleto.GetParentIndex(Indice); Subindo != INDEX_NONE;
+		Subindo = Esqueleto.GetParentIndex(Subindo))
+	{
+		Cadeia.Add(Subindo);
+	}
+
+	FQuat DoPai = FQuat::Identity;
+	for (int32 Passo = Cadeia.Num() - 1; Passo >= 0; --Passo)
+	{
+		const int32 Quem = Cadeia[Passo];
+
+		const FQuat Rot = Local[Quem].GetRotation()
+			* FofuxoEsticar::DeltaDe(Deltas, Esqueleto.GetBoneName(Quem));
+
+		DoPai = (DoPai * Rot).GetNormalized();
+	}
+
+	// LocalRot = RefLocal.Rot * Delta, e o que se quer e DoPai * LocalRot == Orientacao.
+	OutDelta = (Local[Indice].GetRotation().Inverse()
+		* DoPai.Inverse()
+		* FofuxoEsticar::OrientacaoDoEixo(Eixo)).GetNormalized();
+
+	return true;
 }
 
 void FFofuxoEsticarOssos::MontarMenuDeModos(UToolMenu* Menu)

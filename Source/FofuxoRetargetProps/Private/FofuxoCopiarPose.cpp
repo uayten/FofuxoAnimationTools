@@ -1,6 +1,8 @@
-// Fofuxo's Exporter -- copiar a pose de retarget de outro retargeter
+// Fofuxo -- copiar a pose de retarget de outro retargeter
 
 #include "FofuxoCopiarPose.h"
+
+#include "FofuxoPoseNoDisco.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
@@ -255,6 +257,10 @@ void FFofuxoCopiarPose::MontarMenu(UToolMenu* Menu)
 	{
 		return;
 	}
+
+	// A secao do disco vem primeiro: a lista de retargeters cresce com o projeto,
+	// e o arquivo nao deve ficar no fim de uma rolagem.
+	FFofuxoPoseNoDisco::MontarSecao(Menu);
 
 	// O cabecalho da secao diz para onde a pose vai. Sem isto o menu nao mostra em
 	// qual dos dois lados se esta colando, e o botao de Fonte/Alvo fica longe.
