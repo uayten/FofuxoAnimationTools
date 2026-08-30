@@ -3,13 +3,8 @@
 #include "FofuxoOssosNaTela.h"
 
 #include "Animation/DebugSkelMeshComponent.h"
-#include "DynamicMeshBuilder.h"
-#include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
 #include "HitProxies.h"
-#include "Materials/Material.h"
-#include "EditorModes.h"
-#include "Materials/MaterialRenderProxy.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Preferences/PersonaOptions.h"
 #include "PrimitiveDrawingUtils.h"
@@ -53,14 +48,9 @@ namespace FofuxoOssos
 	/** O nome do tipo de proxy que a IKRigEditor poe em cada osso. */
 	static const TCHAR* NomeDoProxy = TEXT("HIKRetargetEditorBoneProxy");
 
-	/** A esfera da junta e o cilindro da vareta, em pixels de raio. */
-	static constexpr float RaioDaJunta = 3.0f;
-	static constexpr float RaioDaVareta = 1.4f;
-
-	/** Quantos lados. Nesse tamanho na tela, mais que isto ninguem distingue. */
-	static constexpr int32 LadosDaEsfera = 10;
-	static constexpr int32 AneisDaEsfera = 6;
-	static constexpr int32 LadosDaVareta = 8;
+	/** O circulo da junta e a espessura da vareta, em pixels. */
+	static constexpr float RaioDaJunta = 3.2f;
+	static constexpr float EspessuraDaVareta = 1.6f;
 
 	/** Um boneco pronto para desenhar. */
 	struct FBoneco
@@ -114,135 +104,6 @@ namespace FofuxoOssos
 		return FMath::Abs(W) * 2.f / FMath::Max(Foco * Largura, UE_KINDA_SMALL_NUMBER);
 	}
 
-	/** Um vertice qualquer da malha. A cor vem do material, entao aqui e branco. */
-	static int32 PorVertice(FDynamicMeshBuilder& Malha, const FVector& Onde, const FVector& Normal)
-	{
-		return Malha.AddVertex(FDynamicMeshVertex(
-			FVector3f(Onde),
-			FVector3f(FVector::CrossProduct(Normal, FVector::UpVector).GetSafeNormal()),
-			FVector3f(Normal),
-			FVector2f::ZeroVector,
-			FColor::White));
-	}
-
-	/** Uma esfera na junta. */
-	static void PorEsfera(FDynamicMeshBuilder& Malha, const FVector& Centro, const float Raio)
-	{
-		int32 Base = INDEX_NONE;
-
-		for (int32 Anel = 0; Anel <= AneisDaEsfera; ++Anel)
-		{
-			const float Phi = UE_PI * static_cast<float>(Anel) / static_cast<float>(AneisDaEsfera);
-			const float SenoPhi = FMath::Sin(Phi);
-			const float CossenoPhi = FMath::Cos(Phi);
-
-			for (int32 Lado = 0; Lado <= LadosDaEsfera; ++Lado)
-			{
-				const float Teta = 2.f * UE_PI * static_cast<float>(Lado) / static_cast<float>(LadosDaEsfera);
-
-				const FVector Normal(SenoPhi * FMath::Cos(Teta), SenoPhi * FMath::Sin(Teta), CossenoPhi);
-
-				const int32 Qual = PorVertice(Malha, Centro + Normal * Raio, Normal);
-				if (Base == INDEX_NONE)
-				{
-					Base = Qual;
-				}
-			}
-		}
-
-		const int32 PorAnel = LadosDaEsfera + 1;
-
-		for (int32 Anel = 0; Anel < AneisDaEsfera; ++Anel)
-		{
-			for (int32 Lado = 0; Lado < LadosDaEsfera; ++Lado)
-			{
-				const int32 Aqui = Base + Anel * PorAnel + Lado;
-				const int32 Abaixo = Aqui + PorAnel;
-
-				Malha.AddTriangle(Aqui, Abaixo, Aqui + 1);
-				Malha.AddTriangle(Aqui + 1, Abaixo, Abaixo + 1);
-			}
-		}
-	}
-
-	/** Um cilindro entre duas juntas, com um raio proprio em cada ponta. */
-	static void PorCilindro(
-		FDynamicMeshBuilder& Malha,
-		const FVector& De, const float RaioDe,
-		const FVector& Ate, const float RaioAte)
-	{
-		const FVector Eixo = Ate - De;
-		const double Comprimento = Eixo.Size();
-
-		if (Comprimento <= UE_KINDA_SMALL_NUMBER)
-		{
-			return;
-		}
-
-		const FVector Z = Eixo / Comprimento;
-
-		FVector X, Y;
-		Z.FindBestAxisVectors(X, Y);
-
-		int32 Base = INDEX_NONE;
-
-		for (int32 Lado = 0; Lado < LadosDaVareta; ++Lado)
-		{
-			const float Angulo = 2.f * UE_PI * static_cast<float>(Lado) / static_cast<float>(LadosDaVareta);
-			const FVector Normal = X * FMath::Cos(Angulo) + Y * FMath::Sin(Angulo);
-
-			const int32 Qual = PorVertice(Malha, De + Normal * RaioDe, Normal);
-			if (Base == INDEX_NONE)
-			{
-				Base = Qual;
-			}
-
-			PorVertice(Malha, Ate + Normal * RaioAte, Normal);
-		}
-
-		for (int32 Lado = 0; Lado < LadosDaVareta; ++Lado)
-		{
-			const int32 Aqui = Base + Lado * 2;
-			const int32 Proximo = Base + ((Lado + 1) % LadosDaVareta) * 2;
-
-			Malha.AddTriangle(Aqui, Aqui + 1, Proximo + 1);
-			Malha.AddTriangle(Aqui, Proximo + 1, Proximo);
-		}
-	}
-
-	/**
-	 * Manda a malha para a tela.
-	 *
-	 * O InvisibleHitProxyId nao e detalhe: sem ele esta geometria entraria no buffer
-	 * de hit proxy sem identidade nenhuma e taparia os ossos da engine, que sao
-	 * justamente o que a busca por proximidade procura -- o desenho novo apagaria a
-	 * selecao que ele deveria facilitar.
-	 */
-	static void Soltar(
-		FDynamicMeshBuilder& Malha,
-		FPrimitiveDrawInterface* PDI,
-		UMaterial* Material,
-		const FLinearColor& Cor)
-	{
-		// A versao "Dynamic" e que e FDynamicPrimitiveResource, e por isso a unica
-		// que o PDI aceita adotar. A outra, a FColoredMaterialRenderProxy pelada, e
-		// para o FMeshElementCollector, que tem o registro dele proprio.
-		FDynamicColoredMaterialRenderProxy* Pintado =
-			new FDynamicColoredMaterialRenderProxy(Material->GetRenderProxy(), Cor);
-
-		PDI->RegisterDynamicResource(Pintado);
-
-		// SDPG_Foreground: o osso atravessa a malha. Sem isso a mao esconde os dedos,
-		// que e justamente onde este desenho serve para alguma coisa.
-		Malha.Draw(
-			PDI,
-			FMatrix::Identity,
-			Pintado,
-			SDPG_Foreground,
-			/*bDisableBackfaceCulling*/ false,
-			/*bReceivesDecals*/ false,
-			FHitProxyId::InvisibleHitProxyId);
-	}
 }
 
 bool FFofuxoOssosNaTela::EstaLigado()
@@ -331,9 +192,7 @@ void FFofuxoOssosNaTela::Desenhar(
 		? Quem.AssetController->GetAsset()
 		: nullptr;
 
-	UMaterial* Material = GEngine != nullptr ? GEngine->ShadedLevelColorationUnlitMaterial : nullptr;
-
-	if (Asset == nullptr || Material == nullptr)
+	if (Asset == nullptr)
 	{
 		return;
 	}
@@ -341,6 +200,9 @@ void FFofuxoOssosNaTela::Desenhar(
 	const UPersonaOptions* Opcoes = GetDefault<UPersonaOptions>();
 	const ERetargetSourceOrTarget Editavel = Quem.GetSourceOrTarget();
 	const TArray<FName>& Selecionados = Quem.GetSelectedBones();
+
+	const FVector Direita = View->GetViewRight();
+	const FVector Cima = View->GetViewUp();
 
 	for (const ERetargetSourceOrTarget Lado : {ERetargetSourceOrTarget::Source, ERetargetSourceOrTarget::Target})
 	{
@@ -365,14 +227,9 @@ void FFofuxoOssosNaTela::Desenhar(
 
 		const bool bEditavel = Lado == Editavel;
 
-		// Duas malhas, e nao uma por osso: o material da cor e um so para o desenho
-		// inteiro, entao os ossos de cada cor vao juntos. Sao no maximo quatro
-		// desenhos na tela toda -- com um por osso seriam uns quinhentos.
-		FDynamicMeshBuilder Normais(View->GetFeatureLevel());
-		FDynamicMeshBuilder Escolhidos(View->GetFeatureLevel());
-
-		bool bTemNormais = false;
-		bool bTemEscolhidos = false;
+		// O lado que nao se edita sai apagado, como na engine: ele e referencia, e
+		// nao ha o que clicar nele.
+		const FLinearColor Normal = bEditavel ? Opcoes->DefaultBoneColor : Opcoes->DisabledBoneColor;
 
 		const FReferenceSkeleton& Esqueleto = Boneco.Esqueleto();
 
@@ -380,55 +237,37 @@ void FFofuxoOssosNaTela::Desenhar(
 		{
 			const FVector& Onde = Boneco.Onde[Indice];
 
-			const bool bEscolhido = bEditavel && Selecionados.Contains(Esqueleto.GetBoneName(Indice));
+			const bool bSelecionado = bEditavel && Selecionados.Contains(Esqueleto.GetBoneName(Indice));
+			const FLinearColor Cor = bSelecionado ? Opcoes->SelectedBoneColor : Normal;
 
-			FDynamicMeshBuilder& Malha = bEscolhido ? Escolhidos : Normais;
-			bool& bTem = bEscolhido ? bTemEscolhidos : bTemNormais;
-			bTem = true;
-
-			// Tamanho constante na tela: e o que diferencia isto do desenho da engine,
-			// que e medido em unidades de mundo -- la o mesmo osso e uma bola no pulso
-			// e some quando a camera afasta.
+			// Tamanho constante na tela: e o que diferencia isto do desenho da
+			// engine, que e medido em unidades de mundo e por isso some ao afastar.
 			const float PorPixel = FofuxoOssos::MundoPorPixel(*View, Onde);
 
-			FofuxoOssos::PorEsfera(Malha, Onde, PorPixel * FofuxoOssos::RaioDaJunta);
+			// SDPG_Foreground: o osso atravessa a malha. Sem isso a mao esconde os
+			// dedos, que e justamente onde este desenho serve para alguma coisa.
+			DrawCircle(
+				PDI, Onde, Direita, Cima, Cor,
+				PorPixel * FofuxoOssos::RaioDaJunta,
+				/*NumSides*/ 12,
+				SDPG_Foreground,
+				PorPixel * FofuxoOssos::EspessuraDaVareta);
 
 			const int32 Pai = Esqueleto.GetParentIndex(Indice);
-			if (!Boneco.Onde.IsValidIndex(Pai))
+			if (Boneco.Onde.IsValidIndex(Pai))
 			{
-				continue;
+				// A vareta pertence ao pai, como no Blender e como na engine: a linha
+				// sai da junta do osso e vai ate a do filho, e clicar nela seleciona o
+				// pai.
+				const FLinearColor CorDaLinha =
+					(bEditavel && Selecionados.Contains(Esqueleto.GetBoneName(Pai)))
+						? Opcoes->SelectedBoneColor
+						: Normal;
+
+				PDI->DrawLine(
+					Boneco.Onde[Pai], Onde, CorDaLinha, SDPG_Foreground,
+					PorPixel * FofuxoOssos::EspessuraDaVareta);
 			}
-
-			// A vareta pertence ao pai, como no Blender e como na engine: ela sai da
-			// junta do osso e vai ate a do filho, e clicar nela seleciona o pai. Por
-			// isso a cor dela e a do pai, e nao a deste osso.
-			const bool bPaiEscolhido = bEditavel && Selecionados.Contains(Esqueleto.GetBoneName(Pai));
-
-			FDynamicMeshBuilder& MalhaDaVareta = bPaiEscolhido ? Escolhidos : Normais;
-			bool& bTemVareta = bPaiEscolhido ? bTemEscolhidos : bTemNormais;
-			bTemVareta = true;
-
-			const FVector& NoPai = Boneco.Onde[Pai];
-
-			// Um raio em cada ponta, e nao um so: numa coluna vista de esguelha as
-			// duas pontas estao a distancias bem diferentes da camera, e um raio unico
-			// engrossaria a ponta de tras.
-			FofuxoOssos::PorCilindro(
-				MalhaDaVareta,
-				NoPai, FofuxoOssos::MundoPorPixel(*View, NoPai) * FofuxoOssos::RaioDaVareta,
-				Onde, PorPixel * FofuxoOssos::RaioDaVareta);
-		}
-
-		const FLinearColor Normal = bEditavel ? Opcoes->DefaultBoneColor : Opcoes->DisabledBoneColor;
-
-		if (bTemNormais)
-		{
-			FofuxoOssos::Soltar(Normais, PDI, Material, Normal);
-		}
-
-		if (bTemEscolhidos)
-		{
-			FofuxoOssos::Soltar(Escolhidos, PDI, Material, Opcoes->SelectedBoneColor);
 		}
 	}
 }

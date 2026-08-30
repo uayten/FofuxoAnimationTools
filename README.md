@@ -1,232 +1,268 @@
 # Fofuxo's Animation Tools
 
-Plugin de editor para Unreal Engine 5.8. Duas coisas, que na prática são a mesma:
-**tirar animação da Unreal** e **fazer o retarget não doer**.
+An editor plugin for **Unreal Engine 5.8**. Two things that are really one: getting
+animation *out* of Unreal, and making IK retargeting stop hurting.
 
-Nasceu de um pipeline concreto — personagem rigado no Blender, retargetado na
-Unreal, exportado de volta — e cada botão aqui existe porque uma etapa desse
-caminho estava custando meia hora por dia.
+It came out of a concrete pipeline — character rigged in Blender, retargeted in
+Unreal, exported back out — and every button exists because some step of that
+loop was costing half an hour a day.
 
 ---
 
-## Exportar
+## About this project
 
-O exportador de FBX da Unreal escreve uma animação por arquivo e não nomeia os
-takes. Quem recebe do outro lado — Blender, Maya, Unity — abre trinta arquivos e
-vê trinta takes chamados `Take 001`.
+I'm a 3D artist, not a programmer. **Every line of C++ in here was written by
+directing an AI** — vibe coding, if you like the term. What I brought was the
+problem, the design calls, and the testing: I'm the one who sat in the IK
+Retargeter and found out that a bone hit proxy is one pixel wide, that the
+retarget pose can't store per-bone translation, and that hiding the engine's
+skeleton also deletes the thing you click on.
 
-**Clique com o botão direito em Animation Sequences no Content Browser →
-`Fofuxo -- Exportar`.**
+I think that's a real way to build engine tooling, and **I'd love to do it at
+Epic** — working on the engine the way this plugin was made, with someone who
+knows the pipeline pain sitting where the decisions get made.
 
-- Todas as animações marcadas e um Skeletal Mesh num arquivo só, **cada animação
-  como um take com o nome do asset**.
-- **FBX, USD e glTF**, no mesmo diálogo.
-- **Destinos**: perfis salvos de eixo para cima, frente, unidade e escala — um
-  para o Blender, outro para o Unity, e não se pensa mais no assunto.
-- **Animações por arquivo**: acima de um limite, o export se quebra em vários
-  arquivos numerados. Alguns importadores engasgam com FBX de centenas de takes.
-- Sem nenhuma animação marcada, sai só a malha.
+**Anyone is welcome to try this retargeting workflow.** If the Live Retarget idea
+or the proximity bone picking is useful to you, take it, break it, tell me what
+went wrong. Issues and forks are very welcome.
 
-Também há o comando de console, para script e para build:
+— [Antônio Froz](https://github.com/uayten)
+
+---
+
+## Install
+
+Copy the folder into `YourProject/Plugins/` and open the project. Unreal compiles
+it on first open.
+
+Requires the **IK Rig** plugin (ships with the engine) and, for the scene
+formats, **USD Importer** and **glTF Exporter** — all declared in the
+`.uplugin`.
+
+---
+
+## Export
+
+Unreal's FBX exporter writes one animation per file and doesn't name the takes.
+Whoever receives them on the other side — Blender, Maya, Unity — opens thirty
+files and sees thirty takes called `Take 001`.
+
+**Right-click Animation Sequences in the Content Browser → `Fofuxo -- Exportar`.**
+
+- Every selected animation plus a Skeletal Mesh in a single file, **each
+  animation as a take named after the asset**.
+- **FBX, USD and glTF**, from the same dialog.
+- **Targets**: saved presets of up axis, forward axis, unit and scale — one for
+  Blender, one for Unity, and you never think about it again.
+- **Animations per file**: past a limit, the export splits into numbered files.
+  Some importers choke on an FBX with hundreds of takes.
+- With no animation selected, you get just the mesh.
+
+There's a console command too, for scripts and builds:
 
 ```
-Fofuxo.Exportar <saida.fbx> <caminho da malha> [pasta das animacoes] [Unity]
+Fofuxo.Exportar <output.fbx> <mesh path> [animation folder] [Unity]
 ```
 
 ---
 
 ## IK Retargeter
 
-Tudo abaixo aparece na barra do editor de IK Retargeter, numa seção **Fofuxo**.
+Everything below shows up in a **Fofuxo** section on the IK Retargeter toolbar.
 
 ### Live Retarget
 
-O problema da mão. A pose de retarget se edita olhando o *ref pose*, e no ref
-pose a mão está aberta — não dá para ver se os dedos fecham na espada, que é a
-única coisa que importa nos dedos. Você só descobre que estão errados quando a
-animação roda, e aí o editor de pose já não está mais ligado.
+The hand problem. You edit the retarget pose while looking at the *ref pose*, and
+in the ref pose the hand is open — you cannot see whether the fingers close
+around the sword, which is the only thing that matters about fingers. You find
+out they're wrong when the animation plays, and by then the pose editor is off.
 
-Com o Live Retarget ligado, o gizmo aparece **no Running Retarget**: pare a
-animação no frame que quiser, clique num osso do alvo e gire.
+With Live Retarget on, the gizmo appears **in Running Retarget**: pause the
+animation on whichever frame you want, click a target bone, and rotate it.
 
-O que o gizmo escreve continua sendo a pose de retarget, e não um ajuste daquele
-frame — o retargeter não tem onde guardar correção por frame. Mas a conta faz
-isso valer a pena. Numa cadeia FK a saída de um osso é
+What the gizmo writes is still the retarget pose, not a per-frame fix — the
+retargeter has nowhere to store per-frame corrections. But the math makes that
+worth it. In an FK chain a bone's output is
 
 ```
-Saída(B) = DeltaDaFonte(B) · PoseDeRetarget(B)
+Output(B) = SourceDelta(B) · RetargetPose(B)
 ```
 
-Pós-multiplicar um `X` na pose de retarget pós-multiplica o mesmo `X` na saída,
-**em qualquer frame**. Então girar o dedo olhando o frame 37 escreve o offset que
-produz exatamente aquele giro no frame 37 — e o mesmo giro, em espaço de mundo,
-em todos os outros. Para dedo isso é o certo: o erro de um dedo que segura uma
-espada é constante, e o frame só serve para você enxergá-lo.
+Post-multiplying an `X` into the retarget pose post-multiplies the same `X` into
+the output, **on every frame**. So rotating the finger while looking at frame 37
+writes the offset that produces exactly that rotation on frame 37 — and the same
+rotation, in world space, on all the others. For fingers that's correct: the
+error of a finger gripping a sword is constant, and the frame is only there so
+you can see it.
 
-Só no alvo. A animação da fonte é o dado de entrada; não há o que ajustar nela.
+Target side only. The source animation is the retarget's input; there is nothing
+to adjust there.
 
-### Painel Transforms editável
+### Editable Transforms panel
 
-O painel de detalhes do osso é da engine, mas destravado: no Live Retarget dá
-para **digitar** a rotação, e não só arrastar o gizmo. São os dois lados da mesma
-escrita, e não havia motivo para um deles estar trancado.
+The engine's bone details panel, unlocked: in Live Retarget you can **type** the
+rotation instead of only dragging the gizmo. They're two sides of the same write,
+and there was no reason for one of them to be greyed out.
 
 ### Alt+R
 
-Devolve ao ref pose a rotação dos ossos selecionados. Vale nos dois modos —
-inclusive com a animação rodando, onde o *Reset Selected Bones* da engine não
-executa. É um comando registrado, então aparece em **Editar → Preferências do
-Editor → Atalhos de Teclado** e a tecla pode ser trocada.
+Resets the selected bones' rotation in the retarget pose. Works in both modes —
+including with the animation running, where the engine's *Reset Selected Bones*
+refuses to execute. It's a registered command, so it shows up under **Edit →
+Editor Preferences → Keyboard Shortcuts** and the key can be rebound.
 
-### Esticar
+### Align (Esticar)
 
-Alinha osso na hora de montar a pose de retarget. Quatro modos, no menu da
-setinha ao lado do botão:
+Straightens bones while you build the retarget pose. Four modes, in the dropdown
+next to the button:
 
-| modo | o que faz |
+| mode | what it does |
 |---|---|
-| Selecionados | alinha cada osso com a rotação do pai — deixa o dedo reto |
-| Com filhos | o mesmo, descendo a cadeia |
-| No último | alinha a cadeia inteira pela ponta |
-| No mundo | aponta a ponta do osso para um eixo do mundo |
+| Selected | aligns each bone with its parent's rotation — straightens the finger |
+| With children | the same, walking down the chain |
+| To the last | aligns the whole chain by its tip |
+| To world | points the bone's tip down a world axis |
 
-O **No mundo** é o que casa arma e mão entre dois esqueletos diferentes: a
-referência é externa aos dois, então eles batem sem ninguém medir nada.
+**To world** is the one that makes a weapon and a hand match across two different
+skeletons: the reference is external to both, so they agree without anyone
+measuring anything.
 
-### Espelhar
+### Mirror
 
-Repete no osso do outro lado a rotação que você deu em um osso — rodou o
-`thigh_l`, o `thigh_r` acompanha espelhado. Acha o par pelo nome (`l`/`r`,
-`left`/`right`, `lt`/`rt`, separados por `_`, `.`, `-`, espaço, ou colados em
-camelCase). Osso sem par fica de fora.
+Repeats on the opposite bone the rotation you just gave one — rotate `thigh_l`
+and `thigh_r` follows, mirrored. It finds the pair by name (`l`/`r`,
+`left`/`right`, `lt`/`rt`, separated by `_`, `.`, `-`, space, or glued in
+camelCase). Bones with no pair stay out.
 
-Se você mexer nos dois lados de uma vez — os dois selecionados no gizmo, um Auto
-Align geral, um Ctrl+Z — o espelho não entra.
+If you move both sides at once — both selected in the gizmo, a global Auto Align,
+a Ctrl+Z — the mirror stays out of it.
 
-### Copiar pose
+### Copy pose
 
-Traz para o lado que você está editando a pose de retarget **de outro
-retargeter**, casando os ossos pelo nome. Serve para o conserto que não viaja: se
-todo retarget do projeto sai do mesmo boneco, o lado fonte de todos eles tem a
-mesma pose, e ajustar um não ajusta os outros.
+Brings the retarget pose **from another retargeter** into the side you're
+editing, matching bones by name. This is for the fix that doesn't travel: if
+every retarget in the project starts from the same character, all of them share
+the same source-side pose, and fixing one doesn't fix the others.
 
-Há também **pose em asset**, que atravessa projeto: salve a pose do Manny num
-asset e aplique noutro projeto, ou num MetaHuman.
+There's also **pose as an asset**, which crosses projects: save the Manny's pose
+into an asset and apply it in another project, or on a MetaHuman.
 
-### Anexos de Preview (Fofuxo)
+### Preview Attachments (Fofuxo)
 
-Um retarget op, na pilha. Pendura uma malha num osso — a espada na mão — só para
-o visor.
+A retarget op, on the stack. It hangs a mesh off a bone — the sword in the hand —
+for the viewport only.
 
-Não é o mesmo que o *Add Preview Asset* do editor de esqueleto: aquele mora na
-`USkeletalMesh` e na `USkeleton`, e some quando o rig é reimportado como asset
-novo. Este mora no retargeter, que é o asset que sobrevive à troca dos dois
-bonecos.
+This is not the skeleton editor's *Add Preview Asset*: that one lives on the
+`USkeletalMesh` and the `USkeleton`, and disappears when the rig is reimported as
+a new asset. This one lives in the retargeter, which is the asset that survives
+swapping both characters.
 
-Cada linha tem:
+Each row has:
 
-- **Boneco** — fonte, alvo, ou os dois (a mesma arma nos dois lados, para
-  comparar).
-- **Osso na fonte / Osso no alvo** — dois campos, porque os dois esqueletos quase
-  nunca chamam o mesmo osso pelo mesmo nome.
-- **Deslocar o osso** — move o osso do alvo, e **sai nas animações exportadas**.
-  É o que conserta a arma não estar na mão. Com o Live Retarget ligado, dá para
-  arrastar isso pelo gizmo de translação.
-- **Encaixe do preview** — move só a malha pendurada, morre no visor. Serve para
-  pivô torto do modelo e para o lado da fonte, onde o deslocamento não alcança.
-- **Alinhar no mundo** — o mesmo alinhamento do botão Esticar, dentro do op.
+- **Character** — source, target, or both (the same weapon on both sides, to
+  compare).
+- **Source bone / Target bone** — two fields, because the two skeletons almost
+  never call the same bone by the same name.
+- **Offset the bone** — moves the target bone, and **it comes out in exported
+  animations**. This is what fixes the weapon not being in the hand. With Live
+  Retarget on you can drag it with the translate gizmo.
+- **Preview fit** — moves only the attached mesh; dies in the viewport. For a
+  crooked model pivot, and for the source side, which the offset can't reach.
+- **Align to world** — the same alignment as the Align button, inside the op.
 
-> **Este op tem que ficar depois do FK Chains e do Run IK Rig na pilha.** Os ops
-> rodam em ordem e quem escreve por último manda: com ele em cima, o FK Chains
-> recalcula o osso depois e o deslocamento se perde sem dizer nada.
+> **This op has to sit after FK Chains and Run IK Rig on the stack.** Ops run in
+> order and the last writer wins: with it on top, FK Chains recomputes the bone
+> afterwards and the offset silently disappears.
 
-### Visor da fonte
+### Source viewport
 
-**Window → Fonte (Fofuxo)**, ou o botão na barra. Um segundo visor da *mesma*
-cena, com a câmera colada no osso da fonte que corresponde ao osso selecionado —
-e seguindo ele quadro a quadro enquanto a animação roda.
+**Window → Fonte (Fofuxo)**, or the toolbar button. A second viewport onto the
+*same* scene, with the camera locked to the source bone that corresponds to the
+selected bone — and following it frame by frame while the animation runs.
 
-Num visor você gira o dedo do alvo; no outro vê como o dedo do gabarito está
-naquele mesmo quadro, sem viajar de câmera entre os dois bonecos.
+In one viewport you rotate the target's finger; in the other you see where the
+reference finger is on that same frame, without flying the camera between the two
+characters.
 
-O correspondente sai do mapeamento de cadeias: achada a cadeia do alvo que contém
-o osso, é o osso na mesma posição proporcional da cadeia mapeada.
+The correspondence comes from the chain mapping: find the target chain containing
+the bone, then take the bone at the same proportional position in the mapped
+chain.
 
-### Ossos em vareta, e clicar neles
+### Stick bones, and being able to click them
 
-Duas coisas diferentes com a mesma origem: numa mão, os ossos da Unreal são
-pequenos, muitos e quase impossíveis de acertar.
+Two different things with the same root cause: in a hand, Unreal's bones are
+small, numerous and nearly impossible to hit.
 
-**Clicar perto passa a bastar** — sempre, sem interruptor. A Unreal seleciona por
-hit proxy e lê *um* pixel, o que está debaixo do cursor; aqui se lê uma caixa de
-22 pixels em volta e escolhe-se o osso mais próximo do centro. O proxy encontrado
-volta para o modo da própria engine, que faz a seleção do jeito dele — painel de
-detalhes, hierarquia e gizmo se atualizam sozinhos.
+**Clicking near a bone is now enough** — always, no toggle. Unreal selects by hit
+proxy and reads *one* pixel, the one under the cursor. Here a 22-pixel box around
+the cursor is read instead, and the bone proxy closest to the centre wins. The
+proxy that's found is handed back to the engine's own mode, which does the
+selection its way — details panel, hierarchy and gizmo all update by themselves,
+with no parallel code path.
 
-**Ossos em vareta** (botão na barra) troca o octaedro da Unreal por cilindro e
-esfera **de tamanho constante na tela**: o osso da engine é medido em unidades de
-mundo, então o mesmo desenho que é uma bola no pulso some quando a câmera afasta.
+**Stick bones** (toolbar toggle) shrinks the engine's octahedral bone and draws a
+thin line between joints with a circle on each, **at a constant size on screen**:
+the engine's bone is measured in world units, so the same drawing that is a ball
+at the wrist vanishes when the camera pulls back.
 
-O desenho da engine não some, encolhe — é nele que mora a identidade do osso para
-o clique. Ele fica escondido debaixo da vareta. O tamanho encolhido é o
-`BoneDrawSize` do retargeter, o mesmo valor da régua em **Character → Bones**;
-desligar devolve o valor de antes.
+It shrinks rather than hides, and that's deliberate: **the bone's identity for
+clicking lives in the engine's drawing.** Hiding it would delete the ability to
+select. The shrunk size is the retargeter's `BoneDrawSize`, the same value as the
+slider under **Character → Bones**; turning the toggle off restores it.
 
-### Exportar animações
+### Export animations
 
-No Asset Browser do editor de retarget:
+In the retarget editor's Asset Browser:
 
-- **Export Selected Animations** — o batch retarget da engine, sem sair do editor.
-- **Refazer as já exportadas** — reexporta o que já foi exportado antes, com os
-  mesmos destinos. Depois de mexer na pose de retarget, é um clique.
+- **Export Selected Animations** — the engine's batch retarget, without leaving
+  the editor.
+- **Redo the already-exported ones** — re-exports whatever was exported before,
+  to the same targets. After touching the retarget pose, it's one click.
 
 ---
 
-## Instalar
+## Building
 
-Copie a pasta para `SeuProjeto/Plugins/` e abra o projeto. A Unreal compila na
-primeira abertura.
-
-Depende do plugin **IK Rig** (vem com a engine) e, para os formatos de cena, de
-**USD Importer** e **glTF Exporter** — todos declarados no `.uplugin`.
-
-## Compilar
-
-O editor precisa estar **fechado**: o Live Coding tranca a build inteira
-enquanto ele estiver aberto, e nem mostra o erro de compilação.
+The editor must be **closed**: Live Coding locks the whole build while it's open,
+and doesn't even show you the compile error.
 
 ```
-"<Engine>/Build/BatchFiles/Build.bat" <Projeto>Editor Win64 Development -Project="<caminho>/<Projeto>.uproject" -WaitMutex
+"<Engine>/Build/BatchFiles/Build.bat" <Project>Editor Win64 Development -Project="<path>/<Project>.uproject" -WaitMutex
 ```
 
-Quando a Unreal só disser *"could not be compiled. Try rebuilding from source
-manually"*, é essa linha que mostra o erro de verdade. Apagar `Intermediate/` e
-`Binaries/` quase nunca é a solução — compile primeiro e leia o erro.
+When Unreal only says *"could not be compiled. Try rebuilding from source
+manually"*, that line is what shows the real error. Deleting `Intermediate/` and
+`Binaries/` is almost never the fix — compile first and read the error.
 
-## Trocar o nome do plugin
+## Renaming the plugin
 
-São dois lugares, e só dois:
+Two places, and only two:
 
-1. `FriendlyName` no `FofuxoExporter.uplugin`.
-2. `FOFUXO_NOME` e `FOFUXO_NOME_CURTO` em
-   [`Source/FofuxoComum/FofuxoNome.h`](Source/FofuxoComum/FofuxoNome.h), de onde
-   sai todo texto de interface.
+1. `FriendlyName` in `FofuxoExporter.uplugin`.
+2. `FOFUXO_NOME` and `FOFUXO_NOME_CURTO` in
+   [`Source/FofuxoComum/FofuxoNome.h`](Source/FofuxoComum/FofuxoNome.h), where
+   every piece of UI text comes from.
 
-O nome da pasta e os nomes dos módulos são encanamento — aparecem em caminhos de
-arquivo e no `IMPLEMENT_MODULE`, e trocá-los dá trabalho sem mudar nada que se
-veja.
+Folder and module names are plumbing — they show up in file paths and
+`IMPLEMENT_MODULE`, and changing them is work that changes nothing you can see.
 
-## Limites conhecidos
+## Known limits
 
-- **Escrever Behavior Tree, não.** Isto é um plugin de animação; nada aqui toca
-  IA.
-- **A aba do Visor da fonte não volta sozinha** quando o editor de retarget
-  reabre: o registro dela acontece meio segundo depois, e o layout salvo já foi
-  restaurado antes disso. Reabra por Window.
-- **Salvar o RTG com as varetas ligadas grava o `BoneDrawSize` encolhido.**
-  Desligar devolve o valor e o próximo save conserta.
-- **Ctrl+Z no Live Retarget às vezes derruba o modo** de volta para o Editing
-  Retarget Pose. O `PostUndo` do retargeter refaz as preview meshes e mexe no
-  playback, e todos os setters para consertar isso de dentro são não exportados
-  da `IKRigEditor`. Há uma correção condicional, que reexecuta o comando da barra
-  quando o modo cai sozinho.
+- **The Source viewport tab doesn't come back on its own** when the retarget
+  editor reopens: it registers half a second after the editor opens, and the
+  saved layout was restored before that. Reopen it from Window.
+- **Saving the RTG with stick bones on stores the shrunk `BoneDrawSize`.**
+  Turning the toggle off restores the value and the next save fixes it.
+- **Ctrl+Z in Live Retarget sometimes drops the mode** back to Editing Retarget
+  Pose. The retargeter's `PostUndo` rebuilds the preview meshes and touches
+  playback, and every setter needed to fix that from the inside is unexported
+  from `IKRigEditor`. There's a conditional workaround that re-runs the toolbar
+  command when the mode falls back on its own.
+
+## A note on the source
+
+The code, the comments and the in-editor text are in **Portuguese** — it started
+as a personal tool and I never saw a reason to write comments in a language I
+think worse in. The identifiers are Portuguese too (`FofuxoOssosNaTela` is "bones
+on screen"). If that's a barrier for you and you want to use this, say so in an
+issue; translating is mechanical.

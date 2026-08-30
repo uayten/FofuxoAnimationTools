@@ -51,9 +51,6 @@ public class FofuxoRetargetProps : ModuleRules
 			// Pelo SAdvancedTransformInputBox, que e o widget de transform do painel de
 			// detalhes -- o mesmo que a IKRigEditor usa na ficha do osso.
 			"AnimationWidgets",
-			// Pelo FDynamicColoredMaterialRenderProxy das varetas: ele e um
-			// FRenderResource, e a vtable dele vem daqui.
-			"RenderCore",
 		});
 
 		// Do editor de retarget, o que se usa daqui e quase todo inline
