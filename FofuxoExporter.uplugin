@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "0.1",
+	"VersionName": "0.1.0",
 	"FriendlyName": "Fofuxo's Animation Tools",
 	"Description": "Ferramentas de animacao para a Unreal. Exporta Animation Sequences e um Skeletal Mesh para um unico FBX, com cada animacao como um take nomeado. No IK Retargeter, acrescenta anexos de preview guardados no proprio retargeter, ajuste da pose com a animacao rodando, pose portatil entre projetos, um segundo visor preso ao osso da fonte e selecao de osso por proximidade.",
 	"Category": "Animation",

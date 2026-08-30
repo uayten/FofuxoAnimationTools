@@ -22,9 +22,18 @@ I think that's a real way to build engine tooling, and **I'd love to do it at
 Epic** — working on the engine the way this plugin was made, with someone who
 knows the pipeline pain sitting where the decisions get made.
 
-**Anyone is welcome to try this retargeting workflow.** If the Live Retarget idea
-or the proximity bone picking is useful to you, take it, break it, tell me what
-went wrong. Issues and forks are very welcome.
+And honestly, **the best outcome for this plugin is not existing.** Every feature
+here works around something the IK Retargeter almost does: a pose editor that
+can't run while the animation does, a bone you can't click, an attachment that
+dies with a reimport. If Epic built these natively — their way, better than mine,
+with access to the parts of `IKRigEditor` that aren't exported — I would close
+this repository happily. Until then it's here, and it's MIT.
+
+**Anyone is welcome to try this retargeting workflow, free, forever.** That part
+is deliberate: [Kawaii Physics](https://github.com/pafuhana1213/KawaiiPhysics) is
+the model — a tool everyone can simply have. If the Live Retarget idea or the
+proximity bone picking is useful to you, take it, break it, tell me what went
+wrong. Issues and forks are very welcome.
 
 — [Antônio Froz](https://github.com/uayten)
 
@@ -32,12 +41,94 @@ went wrong. Issues and forks are very welcome.
 
 ## Install
 
-Copy the folder into `YourProject/Plugins/` and open the project. Unreal compiles
-it on first open.
+**Unreal Engine 5.8.** The GitHub version is tested against the newest engine
+only — see [Releases and Fab](#releases-and-fab).
 
-Requires the **IK Rig** plugin (ships with the engine) and, for the scene
-formats, **USD Importer** and **glTF Exporter** — all declared in the
-`.uplugin`.
+**1. Get the files.** Either `git clone` the repository, or use the green
+**Code → Download ZIP** button and unzip it.
+
+**2. Put it in your project.** You want this:
+
+```
+YourProject/
+  YourProject.uproject
+  Plugins/
+    FofuxoAnimationTools/
+      FofuxoExporter.uplugin
+      Source/
+      Resources/
+```
+
+Create the `Plugins` folder if the project doesn't have one. The folder name
+doesn't matter — Unreal looks for the `.uplugin` file, not for a particular
+folder name. What does matter is that the `.uplugin` sits *directly* inside that
+folder and not one level deeper: a ZIP download unzips into a
+`FofuxoAnimationTools-main/` wrapper, so it's easy to end up with one folder too
+many.
+
+**3. Open the `.uproject`.** Unreal will say the modules are missing and offer to
+rebuild them. Say **Yes**. The first build takes a few minutes.
+
+**4. That's it.** A plugin sitting in your project's `Plugins` folder is enabled
+automatically — you don't have to tick anything. **IK Rig**, **USD Importer** and
+**glTF Exporter** are required and get enabled along with it; all three ship with
+the engine.
+
+To check that it's in: **Edit → Plugins**, search for *Fofuxo*.
+
+### Where the buttons are
+
+- **Export**: right-click one or more Animation Sequences in the Content
+  Browser → `Fofuxo -- Exportar`.
+- **Retarget tools**: open any **IK Retargeter** asset. There is a **Fofuxo**
+  section on the toolbar, and an **Anexos de Preview (Fofuxo)** op you can add
+  from the Op Stack.
+
+### If the rebuild fails
+
+You need **Visual Studio** with the *Game development with C++* workload — the
+version Epic lists for your engine release. Unreal cannot compile a C++ plugin
+without it, and what it tells you is not helpful:
+
+> *Missing Modules — the following modules are missing or built with a different
+> engine version*, followed by *could not be compiled. Try rebuilding from source
+> manually.*
+
+To see the real error, build from a terminal:
+
+```
+"<Engine>/Build/BatchFiles/Build.bat" <Project>Editor Win64 Development -Project="<full path to>/<Project>.uproject" -WaitMutex
+```
+
+Two things trip people up here, and neither one is a broken build:
+
+- **Quote the project path.** If it contains a space — and `Unreal Projects` does
+  — an unquoted path arrives truncated, and the tool reports missing modules for
+  a project it never found.
+- **Deleting `Intermediate/` and `Binaries/` is almost never the fix.** Compile
+  first and read the error.
+
+If your project is Blueprint-only and the rebuild still refuses, add any empty
+C++ class (**Tools → New C++ Class**). That turns it into a C++ project, and the
+plugin builds along with it.
+
+## Releases and Fab
+
+The plan here is the one [DlgSystem](https://github.com/NotYetGames/DlgSystem) by
+NotYetGames uses, because it's the honest one for a solo project:
+
+| where | what you get |
+|---|---|
+| **GitHub** | the latest source, always. Tested against the newest engine version only — right now 5.8. Free, MIT. |
+| **Releases** (here) | tagged snapshots. Source, same as above, but pinned: you know which commit you have and what changed. |
+| **Fab** (planned) | ready-to-use builds, one per engine version, cut less often and from a commit that sat still for a while. Also free. |
+
+The difference that matters to you: **from GitHub you compile it yourself**, which
+needs Visual Studio. A Fab build is prebuilt, so it drops into a Blueprint-only
+project with nothing installed. That's the whole reason the Fab half of this plan
+exists, and until it does exist, the install steps above are the way in.
+
+Nothing here is or will be paid.
 
 ---
 
@@ -258,6 +349,12 @@ Folder and module names are plumbing — they show up in file paths and
   playback, and every setter needed to fix that from the inside is unexported
   from `IKRigEditor`. There's a conditional workaround that re-runs the toolbar
   command when the mode falls back on its own.
+
+## License
+
+[MIT](LICENSE). Use it, ship it, sell what you make with it, fork it and rename
+it. The only thing the licence asks is that the copyright notice travels with
+copies of the plugin's own source.
 
 ## A note on the source
 
