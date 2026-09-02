@@ -1,12 +1,13 @@
 // Fofuxo
 //
-// O mesmo export da janela, por linha de comando. Serve para exportar uma pasta
-// inteira sem clicar em nada, e e por aqui que da para rodar o plugin com o
-// editor em modo -unattended.
+// The same export as the window, from the command line. It is for exporting a
+// whole folder without clicking anything, and it is the way to run the plugin
+// with the editor in -unattended mode.
 
 #include "FofuxoExportOptions.h"
+#include "FofuxoExportRequest.h"
 #include "FofuxoFbxWriter.h"
-#include "FofuxoCenaWriter.h"
+#include "FofuxoSceneWriter.h"
 
 #include "Animation/AnimSequence.h"
 #include "AssetRegistry/ARFilter.h"
@@ -19,70 +20,71 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogFofuxoExporter, Log, All);
 
-static void FofuxoExportarPorComando(const TArray<FString>& Argumentos)
+static void FofuxoExportByCommand(const TArray<FString>& Arguments)
 {
-	// Sem a pasta das animacoes sai so a malha -- o mesmo que a janela faz com
-	// nenhuma animacao marcada.
-	if (Argumentos.Num() < 2)
+	// Without the animation folder only the mesh comes out -- the same as the
+	// window does with no animation ticked.
+	if (Arguments.Num() < 2)
 	{
 		UE_LOG(LogFofuxoExporter, Error,
-			TEXT("Uso: Fofuxo.Exportar <saida.fbx> <caminho da malha> [pasta das animacoes] [Unity]"));
+			TEXT("Usage: Fofuxo.Export <output.fbx> <mesh path> [animation folder] [Unity]"));
 		return;
 	}
 
-	const FString Saida = Argumentos[0];
-	const FString CaminhoDaMalha = Argumentos[1];
-	const FString PastaDasAnimacoes = Argumentos.Num() > 2 ? Argumentos[2] : FString();
+	const FString Output = Arguments[0];
+	const FString MeshPath = Arguments[1];
+	const FString AnimationFolder = Arguments.Num() > 2 ? Arguments[2] : FString();
 
-	USkeletalMesh* Malha = LoadObject<USkeletalMesh>(nullptr, *CaminhoDaMalha);
-	if (Malha == nullptr)
+	USkeletalMesh* Mesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath);
+	if (Mesh == nullptr)
 	{
-		UE_LOG(LogFofuxoExporter, Error, TEXT("Nao carreguei o Skeletal Mesh %s"), *CaminhoDaMalha);
+		UE_LOG(LogFofuxoExporter, Error, TEXT("I could not load the Skeletal Mesh %s"), *MeshPath);
 		return;
 	}
 
-	TArray<UAnimSequence*> Animacoes;
+	TArray<UAnimSequence*> Animations;
 
-	if (!PastaDasAnimacoes.IsEmpty())
+	if (!AnimationFolder.IsEmpty())
 	{
-		IAssetRegistry& Registro =
+		IAssetRegistry& Registry =
 			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-		// So varre se o registro ainda nao terminou de se montar. Varrer sempre, de
-		// forma sincrona, obriga a reler o cabecalho de cada .uasset do projeto --
-		// num editor recem-aberto isso sozinho custa minutos, e num editor que ja
-		// esta de pe nao muda nada porque o registro ja esta pronto.
-		if (Registro.IsLoadingAssets())
+		// Only scan if the registry hasn't finished building itself. Always
+		// scanning, synchronously, forces a reread of every .uasset header in
+		// the project -- in a freshly opened editor that alone costs minutes,
+		// and in an editor that is already up it changes nothing, because the
+		// registry is already done.
+		if (Registry.IsLoadingAssets())
 		{
-			Registro.SearchAllAssets(/*bSynchronousSearch*/ true);
+			Registry.SearchAllAssets(/*bSynchronousSearch*/ true);
 		}
 
-		FARFilter Filtro;
-		Filtro.ClassPaths.Add(UAnimSequence::StaticClass()->GetClassPathName());
-		Filtro.PackagePaths.Add(FName(*PastaDasAnimacoes));
-		Filtro.bRecursivePaths = true;
+		FARFilter Filter;
+		Filter.ClassPaths.Add(UAnimSequence::StaticClass()->GetClassPathName());
+		Filter.PackagePaths.Add(FName(*AnimationFolder));
+		Filter.bRecursivePaths = true;
 
-		TArray<FAssetData> Encontrados;
-		Registro.GetAssets(Filtro, Encontrados);
+		TArray<FAssetData> Found;
+		Registry.GetAssets(Filter, Found);
 
-		for (const FAssetData& Asset : Encontrados)
+		for (const FAssetData& Asset : Found)
 		{
-			if (UAnimSequence* Sequencia = Cast<UAnimSequence>(Asset.GetAsset()))
+			if (UAnimSequence* Sequence = Cast<UAnimSequence>(Asset.GetAsset()))
 			{
-				if (Sequencia->GetSkeleton() == Malha->GetSkeleton())
+				if (Sequence->GetSkeleton() == Mesh->GetSkeleton())
 				{
-					Animacoes.Add(Sequencia);
+					Animations.Add(Sequence);
 				}
 			}
 		}
 
-		if (Animacoes.Num() == 0)
+		if (Animations.Num() == 0)
 		{
 			UE_LOG(LogFofuxoExporter, Error,
-				TEXT("Nenhuma Animation Sequence do esqueleto de %s em %s"), *Malha->GetName(), *PastaDasAnimacoes);
+				TEXT("No Animation Sequence of %s's skeleton in %s"), *Mesh->GetName(), *AnimationFolder);
 			return;
 		}
 
-		Animacoes.Sort([](const UAnimSequence& A, const UAnimSequence& B)
+		Animations.Sort([](const UAnimSequence& A, const UAnimSequence& B)
 		{
 			return A.GetName() < B.GetName();
 		});
@@ -90,59 +92,59 @@ static void FofuxoExportarPorComando(const TArray<FString>& Argumentos)
 	else
 	{
 		UE_LOG(LogFofuxoExporter, Display,
-			TEXT("Sem pasta de animacoes: exportando so a malha %s"), *Malha->GetName());
+			TEXT("No animation folder: exporting only the mesh %s"), *Mesh->GetName());
 	}
 
-	UFofuxoExportOptions* Opcoes = NewObject<UFofuxoExportOptions>();
-	TStrongObjectPtr<UFofuxoExportOptions> Guarda(Opcoes);
+	UFofuxoExportOptions* Options = NewObject<UFofuxoExportOptions>();
+	TStrongObjectPtr<UFofuxoExportOptions> Guard(Options);
 
-	// Aceita tambem o nome de um destino seu, gravado pela janela.
-	Opcoes->LoadConfig();
-	Opcoes->Destino = Argumentos.Num() > 3 ? Argumentos[3] : UFofuxoExportOptions::DestinoBlender;
-	Opcoes->AplicarDestino();
+	// It also accepts the name of a target of yours, saved by the window.
+	Options->LoadConfig();
+	Options->Target = Arguments.Num() > 3 ? Arguments[3] : UFofuxoExportOptions::BlenderTarget;
+	Options->ApplyTarget();
 
-	UE_LOG(LogFofuxoExporter, Display, TEXT("Destinos seus carregados: %d"), Opcoes->MeusDestinos.Num());
-	for (const FFofuxoDestino& Meu : Opcoes->MeusDestinos)
+	UE_LOG(LogFofuxoExporter, Display, TEXT("Targets of yours loaded: %d"), Options->MyTargets.Num());
+	for (const FFofuxoTarget& Mine : Options->MyTargets)
 	{
-		UE_LOG(LogFofuxoExporter, Display, TEXT("  \"%s\" eixo=%d unidade=%d escala=%f"),
-			*Meu.Nome, (int32)Meu.EixoParaCima, (int32)Meu.Unidade, Meu.Escala);
+		UE_LOG(LogFofuxoExporter, Display, TEXT("  \"%s\" axis=%d unit=%d scale=%f"),
+			*Mine.Name, (int32)Mine.UpAxis, (int32)Mine.Unit, Mine.Scale);
 	}
-	UE_LOG(LogFofuxoExporter, Display, TEXT("Aplicado \"%s\" (seu=%d) eixo=%d unidade=%d escala=%f"),
-		*Opcoes->Destino, Opcoes->bDestinoEhMeu ? 1 : 0,
-		(int32)Opcoes->EixoParaCima, (int32)Opcoes->Unidade, Opcoes->Escala);
+	UE_LOG(LogFofuxoExporter, Display, TEXT("Applied \"%s\" (yours=%d) axis=%d unit=%d scale=%f"),
+		*Options->Target, Options->bTargetIsMine ? 1 : 0,
+		(int32)Options->UpAxis, (int32)Options->Unit, Options->Scale);
 
-	FFofuxoExportPedido Pedido;
-	Pedido.Animacoes = Animacoes;
-	Pedido.SkeletalMesh = Malha;
-	Pedido.CaminhoDoArquivo = Saida;
-	Pedido.Opcoes = Opcoes;
+	FFofuxoExportRequest Request;
+	Request.Animations = Animations;
+	Request.SkeletalMesh = Mesh;
+	Request.FilePath = Output;
+	Request.Options = Options;
 
-	// O formato vem do ini, igual ao da janela -- o comando existe para repetir
-	// o que ela faz, nao para ter regra propria.
-	FText Erro;
+	// The format comes from the ini, same as the window's -- the command exists
+	// to repeat what the window does, not to have a rule of its own.
+	FText Error;
 
-	const bool bDeuCerto = Opcoes->Formato == EFofuxoFormato::FBX
-		? FFofuxoFbxWriter::Exportar(Pedido, Erro)
-		: FFofuxoCenaWriter::Exportar(Pedido, Erro);
+	const bool bWorked = Options->Format == EFofuxoFormat::FBX
+		? FFofuxoFbxWriter::Export(Request, Error)
+		: FFofuxoSceneWriter::Export(Request, Error);
 
-	if (!bDeuCerto)
+	if (!bWorked)
 	{
-		UE_LOG(LogFofuxoExporter, Error, TEXT("Falhou: %s"), *Erro.ToString());
+		UE_LOG(LogFofuxoExporter, Error, TEXT("Failed: %s"), *Error.ToString());
 		return;
 	}
 
-	if (Animacoes.Num() == 0)
+	if (Animations.Num() == 0)
 	{
-		UE_LOG(LogFofuxoExporter, Display, TEXT("Fofuxo: so a malha %s escrita em %s"), *Malha->GetName(), *Saida);
+		UE_LOG(LogFofuxoExporter, Display, TEXT("Fofuxo: only the mesh %s written to %s"), *Mesh->GetName(), *Output);
 	}
 	else
 	{
 		UE_LOG(LogFofuxoExporter, Display,
-			TEXT("Fofuxo: %d animacoes escritas a partir de %s"), Animacoes.Num(), *Saida);
+			TEXT("Fofuxo: %d animations written starting from %s"), Animations.Num(), *Output);
 	}
 }
 
-static FAutoConsoleCommand GFofuxoExportar(
-	TEXT("Fofuxo.Exportar"),
-	TEXT("Fofuxo.Exportar <saida.fbx> <caminho da malha> [pasta das animacoes] [Unity]"),
-	FConsoleCommandWithArgsDelegate::CreateStatic(&FofuxoExportarPorComando));
+static FAutoConsoleCommand GFofuxoExport(
+	TEXT("Fofuxo.Export"),
+	TEXT("Fofuxo.Export <output.fbx> <mesh path> [animation folder] [Unity]"),
+	FConsoleCommandWithArgsDelegate::CreateStatic(&FofuxoExportByCommand));

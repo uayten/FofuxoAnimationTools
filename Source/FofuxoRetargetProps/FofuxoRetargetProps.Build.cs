@@ -9,10 +9,21 @@ public class FofuxoRetargetProps : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		// O nome do plugin mora em Source/FofuxoComum/FofuxoNome.h, que nao e
-		// modulo -- e uma pasta de include, para nenhum modulo passar a depender
-		// de outro so por causa de uma string.
-		PublicIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "FofuxoComum"));
+		// The plugin's name lives in Source/FofuxoCommon/FofuxoName.h, which is
+		// not a module -- it is an include folder, so that no module ends up
+		// depending on another one just for a string.
+		PublicIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "FofuxoCommon"));
+
+		// Private/ is split by subject, and UBT only puts its root on the include
+		// path. Listing the subfolders here is what keeps every include a bare file
+		// name -- moving a file between subfolders then touches no other file.
+		PrivateIncludePaths.AddRange(new string[]
+		{
+			Path.Combine(ModuleDirectory, "Private", "Attachments"),
+			Path.Combine(ModuleDirectory, "Private", "Pose"),
+			Path.Combine(ModuleDirectory, "Private", "Viewport"),
+			Path.Combine(ModuleDirectory, "Private", "Export"),
+		});
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
@@ -31,15 +42,16 @@ public class FofuxoRetargetProps : ModuleRules
 			"EditorFramework",
 			"IKRig",
 			"AssetRegistry",
-			// O op que guarda os anexos dentro do retargeter. Ele e de runtime
-			// para o tipo do struct existir no jogo empacotado; quem le a lista e
-			// pendura os componentes no visor e este modulo aqui.
+			// The op that stores the attachments inside the retargeter. It is a
+			// runtime module so the struct type exists in a packaged game; the
+			// one that reads the list and hangs the components in the viewport
+			// is this module here.
 			"FofuxoRetargetOps",
-			// Pelo UIKRetargetBatchOperation::RunBatchRetarget, que e a mesma
-			// operacao do botao Export Selected Animations.
+			// For UIKRetargetBatchOperation::RunBatchRetarget, which is the same
+			// operation as the Export Selected Animations button.
 			"IKRigEditor",
-			// Nada disto e usado direto: sao os modulos por onde passa a cadeia
-			// de include do IKRetargetEditorController.h.
+			// None of these is used directly: they are the modules the include
+			// chain of IKRetargetEditorController.h passes through.
 			"Persona",
 			"PropertyEditor",
 			"ContentBrowser",
@@ -48,15 +60,15 @@ public class FofuxoRetargetProps : ModuleRules
 			"AnimationCore",
 			"AnimGraph",
 			"AdvancedPreviewScene",
-			// Pelo SAdvancedTransformInputBox, que e o widget de transform do painel de
-			// detalhes -- o mesmo que a IKRigEditor usa na ficha do osso.
+			// For SAdvancedTransformInputBox, the transform widget of the details
+			// panel -- the same one IKRigEditor uses on the bone sheet.
 			"AnimationWidgets",
 		});
 
-		// Do editor de retarget, o que se usa daqui e quase todo inline
-		// (FIKRetargetEditor::GetController) ou membro de dado publico (os dois
-		// componentes de preview) -- para isso bastaria o caminho de include. O
-		// que obriga a linkar de verdade e o RunBatchRetarget, que e o unico
-		// simbolo com IKRIGEDITOR_API que a gente chama.
+		// What we use from the retarget editor is almost all inline
+		// (FIKRetargetEditor::GetController) or a public data member (the two
+		// preview components) -- for that the include path alone would do. What
+		// forces an actual link is RunBatchRetarget, the only IKRIGEDITOR_API
+		// symbol we call.
 	}
 }

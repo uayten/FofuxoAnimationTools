@@ -1,7 +1,7 @@
 // Fofuxo
 
-#include "SFofuxoExportWindow.h"
-#include "FofuxoNome.h"
+#include "FofuxoExportFlow.h"
+#include "FofuxoName.h"
 
 #include "Algo/AnyOf.h"
 #include "Animation/AnimSequence.h"
@@ -16,10 +16,11 @@
 class FFofuxoExporterModule : public IModuleInterface
 {
 public:
+
 	virtual void StartupModule() override
 	{
 		UToolMenus::RegisterStartupCallback(
-			FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FFofuxoExporterModule::RegistrarMenus));
+			FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FFofuxoExporterModule::RegisterMenus));
 	}
 
 	virtual void ShutdownModule() override
@@ -29,64 +30,66 @@ public:
 	}
 
 private:
-	void RegistrarMenus()
-	{
-		FToolMenuOwnerScoped Dono(this);
 
-		// O Export... e o Migrate... nao ficam no menu de contexto de cima: eles
-		// sao montados pelo MakeAssetActionsSubMenu, dentro do submenu
-		// "Asset Actions". A secao chama AssetContextMoveActions.
+	void RegisterMenus()
+	{
+		FToolMenuOwnerScoped Owner(this);
+
+		// Export... and Migrate... are not on the top context menu: they are
+		// built by MakeAssetActionsSubMenu, inside the "Asset Actions" submenu.
+		// The section is called AssetContextMoveActions.
 		UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("ContentBrowser.AssetContextMenu.AssetActionsSubMenu");
 		if (Menu == nullptr)
 		{
 			return;
 		}
 
-		FToolMenuSection& Secao = Menu->FindOrAddSection("AssetContextMoveActions");
+		FToolMenuSection& Section = Menu->FindOrAddSection("AssetContextMoveActions");
 
-		Secao.AddDynamicEntry("FofuxoExport", FNewToolMenuSectionDelegate::CreateLambda(
-			[](FToolMenuSection& Entrada)
+		Section.AddDynamicEntry("FofuxoExport", FNewToolMenuSectionDelegate::CreateLambda(
+			[](FToolMenuSection& Entry)
 			{
-				const UContentBrowserAssetContextMenuContext* Contexto =
-					Entrada.FindContext<UContentBrowserAssetContextMenuContext>();
+				const UContentBrowserAssetContextMenuContext* Context =
+					Entry.FindContext<UContentBrowserAssetContextMenuContext>();
 
-				if (Contexto == nullptr)
+				if (Context == nullptr)
 				{
 					return;
 				}
 
-				// Aparece tanto com animacao quanto com malha selecionada. Com
-				// so a malha, a janela junta as animacoes do esqueleto dela.
-				const bool bServe = Algo::AnyOf(Contexto->SelectedAssets,
+				// It shows up both with an animation and with a mesh selected.
+				// With only the mesh, the window gathers its skeleton's
+				// animations.
+				const bool bFits = Algo::AnyOf(Context->SelectedAssets,
 					[](const FAssetData& Asset)
 					{
 						return Asset.AssetClassPath == UAnimSequence::StaticClass()->GetClassPathName()
 							|| Asset.AssetClassPath == USkeletalMesh::StaticClass()->GetClassPathName();
 					});
 
-				if (!bServe)
+				if (!bFits)
 				{
 					return;
 				}
 
-				const TArray<FAssetData> Selecionados = Contexto->SelectedAssets;
+				const TArray<FAssetData> Selected = Context->SelectedAssets;
 
 				FToolMenuEntry Item = FToolMenuEntry::InitMenuEntry(
 					"FofuxoExport",
-					FText::Format(LOCTEXT("FofuxoExport", "{0} -- Exportar"), Fofuxo::NomeCurto()),
+					FText::Format(LOCTEXT("FofuxoExport", "{0} -- Export"), Fofuxo::ShortName()),
 					LOCTEXT("FofuxoExportTooltip",
-						"Exporta as animacoes e um Skeletal Mesh para um unico FBX, "
-						"cada animacao como um take com o nome do asset. Sem nenhuma "
-						"animacao marcada, sai so a malha."),
+						"Exports the animations and a Skeletal Mesh into a single file, "
+						"each animation as a take named after the asset. With no animation "
+						"ticked, only the mesh comes out."),
 					FSlateIcon(),
-					FUIAction(FExecuteAction::CreateLambda([Selecionados]()
+					FUIAction(FExecuteAction::CreateLambda([Selected]()
 					{
-						SFofuxoExportWindow::Abrir(Selecionados);
+						FFofuxoExportFlow::Run(Selected);
 					})));
 
 				Item.InsertPosition = FToolMenuInsert("Export", EToolMenuInsertType::After);
 
-				Entrada.AddEntry(Item);
+				Entry.AddEntry(Item);
 			}));
 	}
 };

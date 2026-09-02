@@ -1,0 +1,53 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "Fofuxo's Animation Tools",
+	"Description": "Animation tools for Unreal. Exports Animation Sequences and a Skeletal Mesh into a single file, each animation as a named take. In the IK Retargeter, it adds preview attachments stored in the retargeter itself, pose editing with the animation running, a pose that travels between projects, a second viewport locked to the source bone, and bone selection by proximity.",
+	"Category": "Animation",
+	"CreatedBy": "Antonio Froz",
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "FofuxoExporter",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		},
+		{
+			"Name": "FofuxoRetargetOps",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "FofuxoRetargetProps",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		},
+		{
+			"Name": "FofuxoUsdScene",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		},
+		{
+			"Name": "FofuxoGltfScene",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "IKRig",
+			"Enabled": true
+		},
+		{
+			"Name": "USDImporter",
+			"Enabled": true
+		},
+		{
+			"Name": "GLTFExporter",
+			"Enabled": true
+		}
+	]
+}

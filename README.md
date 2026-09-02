@@ -114,7 +114,7 @@ YourProject/
   YourProject.uproject
   Plugins/
     FofuxoAnimationTools/
-      FofuxoExporter.uplugin
+      FofuxoAnimationTools.uplugin
       Source/
       Resources/
 ```
@@ -216,10 +216,22 @@ Two targets ship with the plugin, and you can add your own:
 | **Blender** | Z | centimetres | The file comes out identical to Unreal's native export, and the importer decides the object scale. Metres looked like the fix for "object imports at 0.01" and isn't: the FBX SDK's `ConvertScene` doesn't touch vertices, it puts the scale on the nodes, so the 0.01 shows up anyway — just from inside the file. |
 | **Unity** | Y | centimetres | Unity converts the unit on import by itself, but **not** the axis. Handing it Y-up is the whole difference between a character standing up and one lying on its face. |
 
+glTF is always metres and Y-up, so the target's unit and up axis have nothing to
+choose there — but the up axis still decides something. Unreal's FBX, once it has
+been turned Y-up for Unity, ends up at `(-X, Z, -Y)` of the Unreal position;
+Unreal's own glTF exporter writes `(X, Z, Y)`. Same scene, two bases half a turn
+apart around the up axis, and each exporter bakes its own basis into every single
+bone — so a character extracted from one file will not take an animation
+extracted from the other, and nothing warns you: the body just folds into
+impossible shapes. On the **Unity** target the glTF is turned to match the FBX,
+and the skeleton is parented next to the mesh instead of inside it, the way FBX
+does it — Unity clips address bones by path. On **Blender** the file is written
+exactly as Unreal's exporter writes it, which is what Blender's importer expects.
+
 There's a console command too, for scripts and builds:
 
 ```
-Fofuxo.Exportar <output.fbx> <mesh path> [animation folder] [Unity]
+Fofuxo.Export <output.fbx> <mesh path> [animation folder] [Unity]
 ```
 
 The trailing `Unity` switches that run to the Unity target.
@@ -398,9 +410,9 @@ manually"*, that line is what shows the real error. Deleting `Intermediate/` and
 
 Two places, and only two:
 
-1. `FriendlyName` in `FofuxoExporter.uplugin`.
-2. `FOFUXO_NOME` and `FOFUXO_NOME_CURTO` in
-   [`Source/FofuxoComum/FofuxoNome.h`](Source/FofuxoComum/FofuxoNome.h), where
+1. `FriendlyName` in `FofuxoAnimationTools.uplugin`.
+2. `FOFUXO_NAME` and `FOFUXO_SHORT_NAME` in
+   [`Source/FofuxoCommon/FofuxoName.h`](Source/FofuxoCommon/FofuxoName.h), where
    every piece of UI text comes from.
 
 Folder and module names are plumbing — they show up in file paths and
@@ -427,13 +439,13 @@ copies of the plugin's own source.
 
 ## A note on the source
 
-The code, the comments and the in-editor text are in **Portuguese** — it started
-as a personal tool and I never saw a reason to write comments in a language I
-think worse in. The identifiers are Portuguese too (`FofuxoOssosNaTela` is "bones
-on screen").
+The code, the comments and the in-editor text are in **English**. They were in
+Portuguese until recently — it started as a personal tool and I saw no reason to
+write comments in a language I think worse in — and the translation is now done,
+identifiers included, in one pass.
 
-**I intend to translate all of it to English**, now that the repository is open.
-It's mechanical work, not a redesign, so it will happen in passes rather than in
-one commit — UI text first, since that's what you actually have to look at, then
-comments, then identifiers. If a specific string is in your way before I get
-there, open an issue and I'll move it up the queue.
+If you have a retargeter or a pose asset saved by an older build, it still opens:
+`Config/DefaultEngine.ini` carries the redirects from the old struct, enum, class
+and property names to the new ones. Two things do not survive, and both are
+preferences rather than data: the export targets you had created in the window,
+and the toolbar's remembered toggles. Set them once more and they stay.

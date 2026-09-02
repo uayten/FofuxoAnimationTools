@@ -1,4 +1,4 @@
-// Fofuxo -- o modulo que so existe para o op ser um tipo de runtime
+// Fofuxo -- the module that exists only so the op is a runtime type
 
 #include "Modules/ModuleManager.h"
 
