@@ -15,6 +15,7 @@
 
 #include "Animation/AnimSequence.h"
 #include "Engine/SkeletalMesh.h"
+#include "Json/GLTFJsonAnimation.h"
 #include "Json/GLTFJsonNode.h"
 #include "Json/GLTFJsonScene.h"
 #include "Json/GLTFJsonSkin.h"
@@ -77,6 +78,8 @@ namespace FofuxoGltf
 			Node->Mesh = Builder.AddUniqueMesh(Request.Mesh);
 		}
 
+		TMap<FGLTFJsonAnimation*, FString> AnimationNames;
+		TSet<FString> ReservedNames;
 		for (UAnimSequence* Sequence : Request.Animations)
 		{
 			if (Sequence == nullptr)
@@ -84,13 +87,17 @@ namespace FofuxoGltf
 				continue;
 			}
 
-			if (Builder.AddUniqueAnimation(Node, Request.Mesh, Sequence) == nullptr)
+			FGLTFJsonAnimation* Animation = Builder.AddUniqueAnimation(Node, Request.Mesh, Sequence);
+			if (Animation == nullptr)
 			{
 				OutError = FText::Format(
 					LOCTEXT("GltfAnimationFailed", "The engine did not convert the animation {0}."),
 					FText::FromString(Sequence->GetName()));
 				return false;
 			}
+
+			AnimationNames.Add(Animation, Sequence->GetName());
+			ReservedNames.Add(Sequence->GetName());
 		}
 
 		FGLTFJsonScene* Scene = Builder.AddScene();
@@ -107,6 +114,29 @@ namespace FofuxoGltf
 		// the heavy conversion here doesn't leave the editor mute the way FBX
 		// used to.
 		Builder.ProcessSlowTasks();
+
+		// The engine appends an index during its delayed conversion. Restore the
+		// asset names afterwards, numbering only duplicates within this file.
+		TSet<FString> UsedNames;
+		for (const TPair<FGLTFJsonAnimation*, FString>& Entry : AnimationNames)
+		{
+			FString Name = Entry.Value;
+			if (UsedNames.Contains(Name))
+			{
+				int32 Suffix = 1;
+				do
+				{
+					Name = Entry.Value + FString::Printf(TEXT("_%d"), Suffix++);
+				}
+				while (ReservedNames.Contains(Name));
+			}
+
+			// Reserve every original name before assigning suffixes, so a duplicate
+			// of Walk cannot take the name of an asset already called Walk_1.
+			ReservedNames.Add(Name);
+			UsedNames.Add(Name);
+			Entry.Key->Name = MoveTemp(Name);
+		}
 
 		// A target that wants the rig to match the FBX: two corrections, and both
 		// only here -- on the Blender target the file keeps coming out as the
